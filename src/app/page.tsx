@@ -1,6 +1,6 @@
 'use client';
+import ContextualSearch from '@/components/ContextualSearch';
 import PaperList from '@/components/PaperList';
-import { Container, Row, Col, Form, Button, Modal, InputGroup } from 'react-bootstrap';
 import { useState, useEffect } from 'react';
 
 interface Paper {
@@ -23,9 +23,8 @@ export default function Home() {
   const [filterDays, setFilterDays] = useState('7');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showTrendModal, setShowTrendModal] = useState(false);
-  const [trendAnalysis, setTrendAnalysis] = useState('');
-  const [loadingTrends, setLoadingTrends] = useState(false);
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
   useEffect(() => {
     const fetchPapers = async () => {
@@ -36,7 +35,7 @@ export default function Home() {
           category: filterCategory,
           query: searchQuery,
         });
-        const response = await fetch(`/api/papers?${params.toString()}`);
+        const response = await fetch(`${API_BASE_URL}/papers?${params.toString()}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -44,7 +43,7 @@ export default function Home() {
         setPapers(data);
       } catch (error) {
         console.error("Failed to fetch papers:", error);
-        setPapers([]); // Clear papers on error
+        setPapers([]);
       } finally {
         setLoading(false);
       }
@@ -52,109 +51,52 @@ export default function Home() {
 
     const handler = setTimeout(() => {
       fetchPapers();
-    }, 500); // Debounce search input
+    }, 500);
 
     return () => {
       clearTimeout(handler);
     };
   }, [filterDays, filterCategory, searchQuery]);
 
-  const handleShowTrends = async () => {
-    setLoadingTrends(true);
-    setShowTrendModal(true);
-    try {
-      const response = await fetch(`/api/papers/trends?category=${filterCategory}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      setTrendAnalysis(data.trendAnalysis);
-    } catch (error) {
-      console.error("Failed to fetch trend analysis:", error);
-      setTrendAnalysis('Could not load trend analysis.');
-    } finally {
-      setLoadingTrends(false);
-    }
-  };
-
-  const saveToDigest = () => {
-    const digestSettings = { filterCategory, searchQuery };
-    localStorage.setItem('aiPaperDigestSettings', JSON.stringify(digestSettings));
-    alert('Digest settings saved!');
-  };
-
-  const loadFromDigest = () => {
-    const savedSettings = localStorage.getItem('aiPaperDigestSettings');
-    if (savedSettings) {
-      const { filterCategory, searchQuery } = JSON.parse(savedSettings);
-      setFilterCategory(filterCategory);
-      setSearchQuery(searchQuery);
-    }
-  };
-
   return (
-    <Container>
-      <h1 className="my-4 text-center">AI Paper Digest</h1>
-      <Row className="mb-4">
-        <Col md={12} className="mb-3">
-          <InputGroup>
-            <Form.Control
-              placeholder="Search by keywords (e.g., 'diffusion models', 'reinforcement learning')"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <Button onClick={saveToDigest}>Save to Digest</Button>
-            <Button onClick={loadFromDigest}>My Digest</Button>
-          </InputGroup>
-        </Col>
-        <Col md={4}>
-          <Form.Group controlId="filterDays">
-            <Form.Label>Filter by Days:</Form.Label>
-            <Form.Control as="select" value={filterDays} onChange={(e) => setFilterDays(e.target.value)}>
-              <option value="1">Last 24 Hours</option>
-              <option value="3">Last 3 Days</option>
-              <option value="7">Last 7 Days</option>
-            </Form.Control>
-          </Form.Group>
-        </Col>
-        <Col md={4}>
-          <Form.Group controlId="filterCategory">
-            <Form.Label>Filter by Category:</Form.Label>
-            <Form.Control as="select" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              <option value="all">All Categories</option>
-              <option value="cs.AI">Artificial Intelligence</option>
-              <option value="cs.LG">Machine Learning</option>
-              <option value="cs.CV">Computer Vision</option>
-              <option value="cs.CL">Computation and Language</option>
-            </Form.Control>
-          </Form.Group>
-        </Col>
-        <Col md={4} className="d-flex align-items-end">
-          <Button onClick={handleShowTrends} className="w-100">
-            {loadingTrends ? 'Analyzing...' : 'Analyze Trends'}
-          </Button>
-        </Col>
-      </Row>
-      {loading ? (
-        <p className="text-center">Loading papers...</p>
-      ) : papers.length > 0 ? (
-        <PaperList papers={papers} />
-      ) : (
-        <p className="text-center">No papers found for the selected criteria.</p>
-      )}
+    <main className="container">
+      <header style={{ textAlign: 'center', margin: '48px 0' }}>
+        <h1>AI Paper Digest</h1>
+        <p style={{ fontSize: '20px', color: 'var(--secondary-text)' }}>Your intelligent guide to the latest in AI research.</p>
+      </header>
 
-      <Modal show={showTrendModal} onHide={() => setShowTrendModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Trend Analysis</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {loadingTrends ? (
-            <p>Loading analysis...</p>
-          ) : (
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{trendAnalysis}</pre>
-          )}
-        </Modal.Body>
-      </Modal>
-    </Container>
+      <div className="card" style={{ marginBottom: '32px' }}>
+        <ContextualSearch />
+      </div>
+
+      <section>
+        <h2>Discover Papers</h2>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
+          <input
+            type="text"
+            placeholder="Filter by keywords..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="form-control"
+            style={{ flexGrow: 1 }}
+          />
+          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="form-control">
+            <option value="all">All Categories</option>
+            <option value="cs.AI">Artificial Intelligence</option>
+            <option value="cs.LG">Machine Learning</option>
+            <option value="cs.CV">Computer Vision</option>
+            <option value="cs.CL">Computation and Language</option>
+          </select>
+        </div>
+
+        {loading ? (
+          <p style={{ textAlign: 'center' }}>Loading papers...</p>
+        ) : papers.length > 0 ? (
+          <PaperList papers={papers} />
+        ) : (
+          <p style={{ textAlign: 'center' }}>No papers found for the selected criteria.</p>
+        )}
+      </section>
+    </main>
   );
 }
