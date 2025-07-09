@@ -1,29 +1,49 @@
-interface Paper {
-  id: string;
-  title: string;
-  authors: string[];
-  published: string;
-  summary: string;
-  aiSummary: {
-    summary: string;
-    keyContribution: string;
-    novelty: string;
-  };
-  link: string;
-}
+import { useState } from 'react';
+import { Paper } from '../types/Paper';
+import PaperDetailModal from './PaperDetailModal';
+import SmartBadges from './SmartBadges';
 
 interface PaperListProps {
   papers: Paper[];
 }
 
 const PaperList: React.FC<PaperListProps> = ({ papers }) => {
+  const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const openPaperDetail = (paper: Paper) => {
+    setSelectedPaper(paper);
+    setIsModalOpen(true);
+  };
+
+  const closePaperDetail = () => {
+    setIsModalOpen(false);
+    setSelectedPaper(null);
+  };
+
   return (
-    <div style={{ display: 'grid', gap: '24px' }}>
-      {papers.map((paper) => (
-        <div key={paper.id} className="card">
-          <h3 style={{ fontSize: '20px', color: 'var(--primary-text)', marginBottom: '8px' }}>{paper.title}</h3>
-          <p style={{ color: 'var(--secondary-text)', fontSize: '14px', marginBottom: '16px' }}>
-            {paper.authors.join(', ')} - {new Date(paper.published).toLocaleDateString()}
+    <>
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {papers.map((paper) => (
+          <div key={paper.id} className="card paper-card" onClick={() => openPaperDetail(paper)}>
+            <div className="paper-card-header">
+              <h3 className="paper-card-title">
+                {paper.title}
+              </h3>
+              <div className="paper-card-meta">
+                <SmartBadges
+                  impactScore={paper.aiSummary.impactScore || 3.0}
+                  difficultyLevel={paper.aiSummary.difficultyLevel || 'intermediate'}
+                  readingTime={paper.aiSummary.readingTime || Math.ceil(paper.summary.split(' ').length / 200)}
+                  hasCode={paper.aiSummary.hasCode || false}
+                  implementationComplexity={paper.aiSummary.implementationComplexity || 'medium'}
+                  practicalApplicability={paper.aiSummary.practicalApplicability || 'medium'}
+                  size="sm"
+                />
+              </div>
+            </div>
+          <p className="paper-authors">
+            {paper.authors.join(', ')} · {new Date(paper.published).toLocaleDateString()}
           </p>
 
           <div style={{ marginBottom: '16px' }}>
@@ -52,6 +72,15 @@ const PaperList: React.FC<PaperListProps> = ({ papers }) => {
         </div>
       ))}
     </div>
+    
+    {selectedPaper && (
+      <PaperDetailModal
+        paper={selectedPaper}
+        isOpen={isModalOpen}
+        onClose={closePaperDetail}
+      />
+    )}
+  </>
   );
 };
 

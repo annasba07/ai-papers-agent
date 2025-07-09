@@ -69,21 +69,35 @@ if not GEMINI_API_KEY:
 
 configure(api_key=GEMINI_API_KEY)
 
-async def generate_summary(abstract: str) -> dict:
+async def generate_summary(abstract: str, title: str) -> dict:
     try:
         model = GenerativeModel("gemini-1.5-flash")
         json_structure = '''
 {
   "summary": "A concise, one-paragraph summary of the abstract.",
   "keyContribution": "A single sentence describing the core contribution of the paper.",
-  "novelty": "A single sentence explaining what is novel about this work."
+  "novelty": "A single sentence explaining what is novel about this work.",
+  "impactScore": 4.2,
+  "difficultyLevel": "intermediate",
+  "readingTime": 12,
+  "hasCode": true,
+  "implementationComplexity": "medium",
+  "practicalApplicability": "high"
 }
 '''
         prompt = (
-            "Analyze the following research paper abstract and provide a structured summary.\n\n"
-            "Abstract:\n{}\n\n"
-            "Please return a JSON object with the following structure:\n{}"
-        ).format(abstract, json_structure)
+            "Analyze the following research paper and provide a structured summary with intelligent indicators.\n\n"
+            "Title: {}\n\n"
+            "Abstract: {}\n\n"
+            "Please return a JSON object with the following structure:\n{}\n\n"
+            "Scoring Guidelines:\n"
+            "- impactScore: 1-5 scale based on novelty, significance, and potential influence\n"
+            "- difficultyLevel: 'beginner', 'intermediate', or 'advanced'\n"
+            "- readingTime: estimated minutes to read and understand the paper\n"
+            "- hasCode: likely availability of code/implementation\n"
+            "- implementationComplexity: 'low', 'medium', or 'high'\n"
+            "- practicalApplicability: 'low', 'medium', or 'high'"
+        ).format(title, abstract, json_structure)
         response = await model.generate_content_async(prompt)
         text = response.text
         cleaned_text = text.replace("```json", "").replace("```", "").strip()
@@ -93,7 +107,13 @@ async def generate_summary(abstract: str) -> dict:
         return {
             "summary": "Could not generate summary due to an error.",
             "keyContribution": "N/A",
-            "novelty": "N/A"
+            "novelty": "N/A",
+            "impactScore": 3.0,
+            "difficultyLevel": "intermediate",
+            "readingTime": 10,
+            "hasCode": False,
+            "implementationComplexity": "medium",
+            "practicalApplicability": "medium"
         }
 
 async def generate_and_save_summary(
@@ -108,7 +128,7 @@ async def generate_and_save_summary(
     db = SessionLocal() # Create a new session for the background task
     try:
         print(f"BACKGROUND: Generating AI summary for {title}")
-        ai_summary_data = await generate_summary(original_summary)
+        ai_summary_data = await generate_summary(original_summary, title)
         await asyncio.sleep(1) # Delay to respect Gemini API rate limits
 
         # Check if paper already exists (it might have been added by another concurrent request)

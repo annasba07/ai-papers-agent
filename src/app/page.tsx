@@ -1,26 +1,13 @@
 'use client';
 import ContextualSearch from '@/components/ContextualSearch';
 import PaperList from '@/components/PaperList';
+import { Paper } from '@/types/Paper';
 import { useState, useEffect } from 'react';
-
-interface Paper {
-  id: string;
-  title: string;
-  authors: string[];
-  published: string;
-  summary: string;
-  aiSummary: {
-    summary: string;
-    keyContribution: string;
-    novelty: string;
-  };
-  link: string;
-}
 
 export default function Home() {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filterDays, setFilterDays] = useState('7');
+  const [filterDays] = useState('7');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -56,7 +43,7 @@ export default function Home() {
     return () => {
       clearTimeout(handler);
     };
-  }, [filterDays, filterCategory, searchQuery]);
+  }, [filterDays, filterCategory, searchQuery, API_BASE_URL]);
 
   return (
     <main className="container">
