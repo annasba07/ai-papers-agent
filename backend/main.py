@@ -77,26 +77,59 @@ async def generate_summary(abstract: str, title: str) -> dict:
   "summary": "A concise, one-paragraph summary of the abstract.",
   "keyContribution": "A single sentence describing the core contribution of the paper.",
   "novelty": "A single sentence explaining what is novel about this work.",
+  "technicalInnovation": "Detailed explanation of the core technical mechanism or approach.",
+  "methodologyBreakdown": "Step-by-step breakdown of how the proposed method works.",
+  "performanceHighlights": "Key performance results and what makes them significant.",
+  "implementationInsights": "Practical insights about implementation complexity and requirements.",
+  "researchContext": "How this work relates to and builds upon existing research.",
+  "futureImplications": "What this enables for future research or applications.",
+  "limitations": "Key limitations or potential issues with the approach.",
   "impactScore": 4.2,
   "difficultyLevel": "intermediate",
   "readingTime": 12,
   "hasCode": true,
   "implementationComplexity": "medium",
-  "practicalApplicability": "high"
+  "practicalApplicability": "high",
+  "researchSignificance": "breakthrough",
+  "reproductionDifficulty": "medium"
 }
 '''
         prompt = (
-            "Analyze the following research paper and provide a structured summary with intelligent indicators.\n\n"
+            "You are an expert AI researcher analyzing a paper for rapid comprehension. Your goal is to help researchers "
+            "understand this paper extremely quickly and decide if it's worth reading fully.\n\n"
             "Title: {}\n\n"
             "Abstract: {}\n\n"
+            "Provide a comprehensive analysis that enables 2-3 minute deep understanding. Focus on:\n\n"
+            "TECHNICAL DEPTH:\n"
+            "- What specific technical innovation is introduced?\n"
+            "- How does the core mechanism/algorithm work?\n"
+            "- What are the key mathematical or architectural insights?\n\n"
+            "METHODOLOGY:\n"
+            "- Break down the approach step-by-step\n"
+            "- Explain the key algorithmic or design choices\n"
+            "- Identify what makes this approach different from existing methods\n\n"
+            "PERFORMANCE & IMPACT:\n"
+            "- What are the key results and why are they significant?\n"
+            "- How does this compare to previous state-of-the-art?\n"
+            "- What performance gains or capabilities does this enable?\n\n"
+            "IMPLEMENTATION REALITY:\n"
+            "- What would it actually take to implement this?\n"
+            "- What are the computational/resource requirements?\n"
+            "- What are likely implementation challenges or gotchas?\n\n"
+            "RESEARCH POSITIONING:\n"
+            "- How does this build on or differ from existing work?\n"
+            "- What research trajectory does this represent?\n"
+            "- What future work does this enable or suggest?\n\n"
             "Please return a JSON object with the following structure:\n{}\n\n"
             "Scoring Guidelines:\n"
-            "- impactScore: 1-5 scale based on novelty, significance, and potential influence\n"
+            "- impactScore: 1-5 scale (1=incremental, 5=breakthrough)\n"
             "- difficultyLevel: 'beginner', 'intermediate', or 'advanced'\n"
-            "- readingTime: estimated minutes to read and understand the paper\n"
-            "- hasCode: likely availability of code/implementation\n"
+            "- readingTime: realistic minutes to read and understand the full paper\n"
+            "- hasCode: likely availability of implementation code\n"
             "- implementationComplexity: 'low', 'medium', or 'high'\n"
-            "- practicalApplicability: 'low', 'medium', or 'high'"
+            "- practicalApplicability: 'low', 'medium', or 'high'\n"
+            "- researchSignificance: 'incremental', 'significant', or 'breakthrough'\n"
+            "- reproductionDifficulty: 'low', 'medium', or 'high'"
         ).format(title, abstract, json_structure)
         response = await model.generate_content_async(prompt)
         text = response.text
@@ -108,12 +141,21 @@ async def generate_summary(abstract: str, title: str) -> dict:
             "summary": "Could not generate summary due to an error.",
             "keyContribution": "N/A",
             "novelty": "N/A",
+            "technicalInnovation": "Analysis unavailable due to processing error.",
+            "methodologyBreakdown": "Analysis unavailable due to processing error.",
+            "performanceHighlights": "Analysis unavailable due to processing error.",
+            "implementationInsights": "Analysis unavailable due to processing error.",
+            "researchContext": "Analysis unavailable due to processing error.",
+            "futureImplications": "Analysis unavailable due to processing error.",
+            "limitations": "Analysis unavailable due to processing error.",
             "impactScore": 3.0,
             "difficultyLevel": "intermediate",
             "readingTime": 10,
             "hasCode": False,
             "implementationComplexity": "medium",
-            "practicalApplicability": "medium"
+            "practicalApplicability": "medium",
+            "researchSignificance": "incremental",
+            "reproductionDifficulty": "medium"
         }
 
 async def generate_and_save_summary(

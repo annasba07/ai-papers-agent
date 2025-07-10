@@ -38,6 +38,8 @@ const PaperList: React.FC<PaperListProps> = ({ papers }) => {
                   hasCode={paper.aiSummary.hasCode || false}
                   implementationComplexity={paper.aiSummary.implementationComplexity || 'medium'}
                   practicalApplicability={paper.aiSummary.practicalApplicability || 'medium'}
+                  researchSignificance={paper.aiSummary.researchSignificance || 'incremental'}
+                  reproductionDifficulty={paper.aiSummary.reproductionDifficulty || 'medium'}
                   size="sm"
                 />
               </div>

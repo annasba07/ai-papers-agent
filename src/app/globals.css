@@ -297,6 +297,34 @@ h2 {
   border-left-color: var(--accent-blue);
 }
 
+.insight-card.technical {
+  border-left-color: var(--accent-purple);
+}
+
+.insight-card.methodology {
+  border-left-color: var(--accent-orange);
+}
+
+.insight-card.performance {
+  border-left-color: var(--accent-pink);
+}
+
+.insight-card.implementation {
+  border-left-color: var(--accent-blue);
+}
+
+.insight-card.context {
+  border-left-color: var(--accent-purple);
+}
+
+.insight-card.future {
+  border-left-color: var(--accent-orange);
+}
+
+.insight-card.limitations {
+  border-left-color: var(--accent-pink);
+}
+
 .insight-card.novelty {
   border-left-color: var(--accent-purple);
 }
@@ -587,6 +615,17 @@ h2 {
 
 .time-badge .badge-icon {
   filter: brightness(1.2);
+}
+
+/* Significance Badge */
+.significance-badge {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9));
+  border-width: 2px;
+}
+
+.significance-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Impact Badge */

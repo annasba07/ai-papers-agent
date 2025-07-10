@@ -67,6 +67,8 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
                 hasCode={paper.aiSummary.hasCode || false}
                 implementationComplexity={paper.aiSummary.implementationComplexity || 'medium'}
                 practicalApplicability={paper.aiSummary.practicalApplicability || 'medium'}
+                researchSignificance={paper.aiSummary.researchSignificance || 'incremental'}
+                reproductionDifficulty={paper.aiSummary.reproductionDifficulty || 'medium'}
                 size="md"
               />
             </div>
@@ -85,28 +87,77 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
 
           <div className="content-sections">
             <section className="insight-section">
-              <h3>Key Contribution</h3>
+              <h3>🎯 Key Contribution</h3>
               <div className="insight-card contribution">
                 <p>{paper.aiSummary.keyContribution}</p>
               </div>
             </section>
 
             <section className="insight-section">
-              <h3>What&apos;s Novel</h3>
+              <h3>🔬 Technical Innovation</h3>
+              <div className="insight-card technical">
+                <p>{paper.aiSummary.technicalInnovation || 'Technical analysis not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>⚙️ Methodology</h3>
+              <div className="insight-card methodology">
+                <p>{paper.aiSummary.methodologyBreakdown || 'Methodology breakdown not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>📊 Performance Highlights</h3>
+              <div className="insight-card performance">
+                <p>{paper.aiSummary.performanceHighlights || 'Performance analysis not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>🔧 Implementation Insights</h3>
+              <div className="insight-card implementation">
+                <p>{paper.aiSummary.implementationInsights || 'Implementation insights not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>🔗 Research Context</h3>
+              <div className="insight-card context">
+                <p>{paper.aiSummary.researchContext || 'Research context not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>🚀 Future Implications</h3>
+              <div className="insight-card future">
+                <p>{paper.aiSummary.futureImplications || 'Future implications not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>⚠️ Limitations</h3>
+              <div className="insight-card limitations">
+                <p>{paper.aiSummary.limitations || 'Limitations analysis not available.'}</p>
+              </div>
+            </section>
+
+            <section className="insight-section">
+              <h3>✨ What&apos;s Novel</h3>
               <div className="insight-card novelty">
                 <p>{paper.aiSummary.novelty}</p>
               </div>
             </section>
 
             <section className="insight-section">
-              <h3>AI Summary</h3>
+              <h3>📝 AI Summary</h3>
               <div className="insight-card summary">
                 <p>{paper.aiSummary.summary}</p>
               </div>
             </section>
 
             <section className="insight-section">
-              <h3>Original Abstract</h3>
+              <h3>📄 Original Abstract</h3>
               <div className="insight-card abstract">
                 <p>{paper.summary}</p>
               </div>

@@ -7,6 +7,8 @@ interface SmartBadgesProps {
   hasCode: boolean;
   implementationComplexity: 'low' | 'medium' | 'high';
   practicalApplicability: 'low' | 'medium' | 'high';
+  researchSignificance?: 'incremental' | 'significant' | 'breakthrough';
+  reproductionDifficulty?: 'low' | 'medium' | 'high';
   size?: 'sm' | 'md';
 }
 
@@ -17,6 +19,8 @@ const SmartBadges: React.FC<SmartBadgesProps> = ({
   hasCode,
   implementationComplexity,
   practicalApplicability,
+  researchSignificance = 'incremental',
+  reproductionDifficulty = 'medium',
   size = 'md'
 }) => {
   const getImpactColor = (score: number) => {
@@ -43,6 +47,24 @@ const SmartBadges: React.FC<SmartBadgesProps> = ({
       case 'medium': return 'var(--accent-orange)';
       case 'low': return 'var(--accent-pink)';
       default: return 'var(--secondary-text)';
+    }
+  };
+
+  const getSignificanceColor = (significance: string) => {
+    switch (significance) {
+      case 'breakthrough': return 'var(--accent-pink)';
+      case 'significant': return 'var(--accent-orange)';
+      case 'incremental': return 'var(--accent-blue)';
+      default: return 'var(--secondary-text)';
+    }
+  };
+
+  const getSignificanceIcon = (significance: string) => {
+    switch (significance) {
+      case 'breakthrough': return '🚀';
+      case 'significant': return '⭐';
+      case 'incremental': return '📈';
+      default: return '📊';
     }
   };
 
@@ -94,6 +116,14 @@ const SmartBadges: React.FC<SmartBadgesProps> = ({
         <div className="badge-content">
           <span className="difficulty-dot" style={{ backgroundColor: getDifficultyColor(difficultyLevel) }}></span>
           <span className="badge-text">{difficultyLevel}</span>
+        </div>
+      </div>
+
+      {/* Research Significance */}
+      <div className={`${badgeClass} significance-badge`} style={{ borderColor: getSignificanceColor(researchSignificance) }}>
+        <div className="badge-content">
+          <span className="badge-icon">{getSignificanceIcon(researchSignificance)}</span>
+          {size === 'md' && <span className="badge-text">{researchSignificance}</span>}
         </div>
       </div>
 
