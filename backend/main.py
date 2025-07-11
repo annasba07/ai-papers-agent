@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from pydantic import BaseModel
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, String, Text, DateTime, JSON
 from sqlalchemy.ext.declarative import declarative_base
@@ -10,6 +12,8 @@ import os
 from dotenv import load_dotenv
 import json
 import asyncio
+import redis
+import hashlib
 from google.generativeai import GenerativeModel, configure
 
 # Load environment variables
@@ -69,76 +73,342 @@ if not GEMINI_API_KEY:
 
 configure(api_key=GEMINI_API_KEY)
 
-async def generate_summary(abstract: str, title: str) -> dict:
+# Redis Configuration
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+try:
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    # Test connection
+    redis_client.ping()
+    print("Redis connected successfully")
+except redis.ConnectionError:
+    print("Redis not available, caching disabled")
+    redis_client = None
+
+def get_cache_key(title: str, abstract: str, analysis_type: str = "full") -> str:
+    """Generate a consistent cache key for paper analysis"""
+    content = f"{title}|{abstract}|{analysis_type}"
+    return f"paper_analysis:{hashlib.md5(content.encode()).hexdigest()}"
+
+def get_cached_analysis(title: str, abstract: str, analysis_type: str = "full") -> dict:
+    """Retrieve cached analysis result"""
+    if not redis_client:
+        return None
+    
+    try:
+        cache_key = get_cache_key(title, abstract, analysis_type)
+        cached_result = redis_client.get(cache_key)
+        if cached_result:
+            print(f"Cache HIT for {analysis_type} analysis: {title[:50]}...")
+            return json.loads(cached_result)
+        else:
+            print(f"Cache MISS for {analysis_type} analysis: {title[:50]}...")
+            return None
+    except Exception as e:
+        print(f"Cache retrieval error: {e}")
+        return None
+
+def cache_analysis(title: str, abstract: str, result: dict, analysis_type: str = "full", ttl: int = 86400) -> None:
+    """Cache analysis result with TTL (default 24 hours)"""
+    if not redis_client:
+        return
+    
+    try:
+        cache_key = get_cache_key(title, abstract, analysis_type)
+        redis_client.setex(cache_key, ttl, json.dumps(result))
+        print(f"Cached {analysis_type} analysis: {title[:50]}...")
+    except Exception as e:
+        print(f"Cache storage error: {e}")
+
+async def generate_technical_analysis(abstract: str, title: str) -> dict:
+    """Stage 1: Deep technical analysis using Gemini Pro"""
+    # Check cache first
+    cached_result = get_cached_analysis(title, abstract, "technical")
+    if cached_result:
+        return cached_result
+    
+    try:
+        model = GenerativeModel("gemini-1.5-flash")
+        json_structure = '''
+{
+  "technicalInnovation": "Detailed explanation of the core technical mechanism or approach.",
+  "methodologyBreakdown": "Step-by-step breakdown of how the proposed method works.",
+  "performanceHighlights": "Key performance results and what makes them significant.",
+  "implementationInsights": "Practical insights about implementation complexity and requirements.",
+  "limitations": "Key limitations or potential issues with the approach.",
+  "reproductionDifficulty": "low"
+}
+'''
+        prompt = (
+            "You are a technical AI expert analyzing the core innovation of this research paper. "
+            "Focus ONLY on the technical depth and implementation reality.\n\n"
+            "Title: {}\n\nAbstract: {}\n\n"
+            "Provide detailed technical analysis:\n\n"
+            "CORE TECHNICAL INNOVATION:\n"
+            "- What specific technical mechanism is introduced?\n"
+            "- How does the algorithm/architecture work step-by-step?\n"
+            "- What are the key mathematical or computational insights?\n\n"
+            "METHODOLOGY BREAKDOWN:\n"
+            "- Break down the approach into clear, implementable steps\n"
+            "- Explain key design decisions and why they matter\n"
+            "- Identify algorithmic complexity and computational requirements\n\n"
+            "PERFORMANCE ANALYSIS:\n"
+            "- What are the key quantitative results?\n"
+            "- Why are these results technically significant?\n"
+            "- How do they compare to theoretical limits or previous work?\n\n"
+            "IMPLEMENTATION REALITY:\n"
+            "- What would it actually take to implement this?\n"
+            "- What are the hardware/software requirements?\n"
+            "- What are likely technical challenges or implementation gotchas?\n\n"
+            "LIMITATIONS & REPRODUCTION:\n"
+            "- What are the technical limitations or failure modes?\n"
+            "- How difficult would this be to reproduce accurately?\n\n"
+            "Return JSON: {}"
+        ).format(title, abstract, json_structure)
+        response = await model.generate_content_async(prompt)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        result = json.loads(text)
+        
+        # Cache the result
+        cache_analysis(title, abstract, result, "technical")
+        return result
+    except Exception as e:
+        print(f"Error in technical analysis: {e}")
+        return {
+            "technicalInnovation": "Technical analysis unavailable due to processing error.",
+            "methodologyBreakdown": "Methodology analysis unavailable due to processing error.",
+            "performanceHighlights": "Performance analysis unavailable due to processing error.",
+            "implementationInsights": "Implementation analysis unavailable due to processing error.",
+            "limitations": "Limitations analysis unavailable due to processing error.",
+            "reproductionDifficulty": "medium"
+        }
+
+async def generate_research_context(abstract: str, title: str) -> dict:
+    """Stage 2: Research positioning and context analysis"""
+    # Check cache first
+    cached_result = get_cached_analysis(title, abstract, "context")
+    if cached_result:
+        return cached_result
+    
+    try:
+        model = GenerativeModel("gemini-1.5-flash")
+        json_structure = '''
+{
+  "researchContext": "How this work relates to and builds upon existing research.",
+  "futureImplications": "What this enables for future research or applications.",
+  "researchSignificance": "breakthrough",
+  "impactScore": 4.2
+}
+'''
+        prompt = (
+            "You are a research strategy expert analyzing how this paper fits in the broader research landscape. "
+            "Focus on positioning, significance, and future implications.\n\n"
+            "Title: {}\n\nAbstract: {}\n\n"
+            "Provide research context analysis:\n\n"
+            "RESEARCH POSITIONING:\n"
+            "- How does this build on existing work in the field?\n"
+            "- What research trajectory does this represent?\n"
+            "- How does this differ from or improve upon recent approaches?\n\n"
+            "FUTURE IMPLICATIONS:\n"
+            "- What new research directions does this enable?\n"
+            "- What practical applications become possible?\n"
+            "- How might this influence the field's development?\n\n"
+            "SIGNIFICANCE ASSESSMENT:\n"
+            "- Is this incremental improvement, significant advance, or breakthrough?\n"
+            "- What makes this work important (or not) for the field?\n"
+            "- Rate impact potential on 1-5 scale based on novelty and significance\n\n"
+            "Return JSON: {}"
+        ).format(title, abstract, json_structure)
+        response = await model.generate_content_async(prompt)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        result = json.loads(text)
+        
+        # Cache the result
+        cache_analysis(title, abstract, result, "context")
+        return result
+    except Exception as e:
+        print(f"Error in research context analysis: {e}")
+        return {
+            "researchContext": "Research context analysis unavailable due to processing error.",
+            "futureImplications": "Future implications analysis unavailable due to processing error.",
+            "researchSignificance": "incremental",
+            "impactScore": 3.0
+        }
+
+async def generate_practical_assessment(abstract: str, title: str) -> dict:
+    """Stage 3: Practical applicability and implementation assessment"""
+    # Check cache first
+    cached_result = get_cached_analysis(title, abstract, "practical")
+    if cached_result:
+        return cached_result
+    
+    try:
+        model = GenerativeModel("gemini-1.5-flash")
+        json_structure = '''
+{
+  "practicalApplicability": "high",
+  "implementationComplexity": "medium",
+  "hasCode": true,
+  "difficultyLevel": "intermediate",
+  "readingTime": 12
+}
+'''
+        prompt = (
+            "You are a practical AI engineer assessing the real-world applicability of this research. "
+            "Focus on implementation feasibility and practical value.\n\n"
+            "Title: {}\n\nAbstract: {}\n\n"
+            "Provide practical assessment:\n\n"
+            "PRACTICAL APPLICABILITY:\n"
+            "- How useful is this for real-world applications? (high/medium/low)\n"
+            "- What practical problems does this solve?\n"
+            "- Is this production-ready or research prototype level?\n\n"
+            "IMPLEMENTATION COMPLEXITY:\n"
+            "- How difficult to implement from scratch? (low/medium/high)\n"
+            "- What specialized knowledge/tools are required?\n"
+            "- Are there likely to be available implementations?\n\n"
+            "ACCESSIBILITY:\n"
+            "- What skill level needed to understand this? (beginner/intermediate/advanced)\n"
+            "- Realistic time to read and understand the full paper (minutes)\n"
+            "- Likelihood of code/implementation being available (true/false)\n\n"
+            "Return JSON: {}"
+        ).format(title, abstract, json_structure)
+        response = await model.generate_content_async(prompt)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        result = json.loads(text)
+        
+        # Cache the result
+        cache_analysis(title, abstract, result, "practical")
+        return result
+    except Exception as e:
+        print(f"Error in practical assessment: {e}")
+        return {
+            "practicalApplicability": "medium",
+            "implementationComplexity": "medium",
+            "hasCode": False,
+            "difficultyLevel": "intermediate",
+            "readingTime": 10
+        }
+
+async def generate_basic_summary(abstract: str, title: str) -> dict:
+    """Stage 4: Generate basic summary and novelty assessment"""
+    # Check cache first
+    cached_result = get_cached_analysis(title, abstract, "summary")
+    if cached_result:
+        return cached_result
+    
     try:
         model = GenerativeModel("gemini-1.5-flash")
         json_structure = '''
 {
   "summary": "A concise, one-paragraph summary of the abstract.",
   "keyContribution": "A single sentence describing the core contribution of the paper.",
-  "novelty": "A single sentence explaining what is novel about this work.",
-  "technicalInnovation": "Detailed explanation of the core technical mechanism or approach.",
-  "methodologyBreakdown": "Step-by-step breakdown of how the proposed method works.",
-  "performanceHighlights": "Key performance results and what makes them significant.",
-  "implementationInsights": "Practical insights about implementation complexity and requirements.",
-  "researchContext": "How this work relates to and builds upon existing research.",
-  "futureImplications": "What this enables for future research or applications.",
-  "limitations": "Key limitations or potential issues with the approach.",
-  "impactScore": 4.2,
-  "difficultyLevel": "intermediate",
-  "readingTime": 12,
-  "hasCode": true,
-  "implementationComplexity": "medium",
-  "practicalApplicability": "high",
-  "researchSignificance": "breakthrough",
-  "reproductionDifficulty": "medium"
+  "novelty": "A single sentence explaining what is novel about this work."
 }
 '''
         prompt = (
-            "You are an expert AI researcher analyzing a paper for rapid comprehension. Your goal is to help researchers "
-            "understand this paper extremely quickly and decide if it's worth reading fully.\n\n"
-            "Title: {}\n\n"
-            "Abstract: {}\n\n"
-            "Provide a comprehensive analysis that enables 2-3 minute deep understanding. Focus on:\n\n"
-            "TECHNICAL DEPTH:\n"
-            "- What specific technical innovation is introduced?\n"
-            "- How does the core mechanism/algorithm work?\n"
-            "- What are the key mathematical or architectural insights?\n\n"
-            "METHODOLOGY:\n"
-            "- Break down the approach step-by-step\n"
-            "- Explain the key algorithmic or design choices\n"
-            "- Identify what makes this approach different from existing methods\n\n"
-            "PERFORMANCE & IMPACT:\n"
-            "- What are the key results and why are they significant?\n"
-            "- How does this compare to previous state-of-the-art?\n"
-            "- What performance gains or capabilities does this enable?\n\n"
-            "IMPLEMENTATION REALITY:\n"
-            "- What would it actually take to implement this?\n"
-            "- What are the computational/resource requirements?\n"
-            "- What are likely implementation challenges or gotchas?\n\n"
-            "RESEARCH POSITIONING:\n"
-            "- How does this build on or differ from existing work?\n"
-            "- What research trajectory does this represent?\n"
-            "- What future work does this enable or suggest?\n\n"
-            "Please return a JSON object with the following structure:\n{}\n\n"
-            "Scoring Guidelines:\n"
-            "- impactScore: 1-5 scale (1=incremental, 5=breakthrough)\n"
-            "- difficultyLevel: 'beginner', 'intermediate', or 'advanced'\n"
-            "- readingTime: realistic minutes to read and understand the full paper\n"
-            "- hasCode: likely availability of implementation code\n"
-            "- implementationComplexity: 'low', 'medium', or 'high'\n"
-            "- practicalApplicability: 'low', 'medium', or 'high'\n"
-            "- researchSignificance: 'incremental', 'significant', or 'breakthrough'\n"
-            "- reproductionDifficulty: 'low', 'medium', or 'high'"
+            "You are an expert summarizer creating concise insights for busy AI researchers.\n\n"
+            "Title: {}\n\nAbstract: {}\n\n"
+            "Provide:\n"
+            "- SUMMARY: One clear paragraph explaining what this paper does\n"
+            "- KEY CONTRIBUTION: One sentence capturing the main contribution\n"
+            "- NOVELTY: One sentence explaining what's new/different\n\n"
+            "Return JSON: {}"
         ).format(title, abstract, json_structure)
         response = await model.generate_content_async(prompt)
-        text = response.text
-        cleaned_text = text.replace("```json", "").replace("```", "").strip()
-        return json.loads(cleaned_text)
+        text = response.text.replace("```json", "").replace("```", "").strip()
+        result = json.loads(text)
+        
+        # Cache the result
+        cache_analysis(title, abstract, result, "summary")
+        return result
     except Exception as e:
-        print(f"Error generating summary: {e}")
+        print(f"Error in basic summary: {e}")
         return {
             "summary": "Could not generate summary due to an error.",
+            "keyContribution": "N/A",
+            "novelty": "N/A"
+        }
+
+async def generate_summary(abstract: str, title: str) -> dict:
+    """Multi-stage analysis pipeline for comprehensive paper understanding"""
+    # Check if full analysis is cached
+    cached_result = get_cached_analysis(title, abstract, "full")
+    if cached_result:
+        return cached_result
+    
+    try:
+        print(f"Starting multi-stage analysis for: {title}")
+        
+        # Run all analysis stages in parallel for speed
+        stage1_task = generate_technical_analysis(abstract, title)
+        stage2_task = generate_research_context(abstract, title)
+        stage3_task = generate_practical_assessment(abstract, title)
+        stage4_task = generate_basic_summary(abstract, title)
+        
+        # Wait for all stages to complete
+        technical, context, practical, basic = await asyncio.gather(
+            stage1_task, stage2_task, stage3_task, stage4_task,
+            return_exceptions=True
+        )
+        
+        # Combine all analysis results
+        combined_result = {}
+        
+        # Add basic summary
+        if isinstance(basic, dict):
+            combined_result.update(basic)
+        else:
+            combined_result.update({
+                "summary": "Summary generation failed.",
+                "keyContribution": "N/A",
+                "novelty": "N/A"
+            })
+        
+        # Add technical analysis
+        if isinstance(technical, dict):
+            combined_result.update(technical)
+        else:
+            combined_result.update({
+                "technicalInnovation": "Technical analysis failed.",
+                "methodologyBreakdown": "Methodology analysis failed.",
+                "performanceHighlights": "Performance analysis failed.",
+                "implementationInsights": "Implementation analysis failed.",
+                "limitations": "Limitations analysis failed.",
+                "reproductionDifficulty": "medium"
+            })
+        
+        # Add research context
+        if isinstance(context, dict):
+            combined_result.update(context)
+        else:
+            combined_result.update({
+                "researchContext": "Research context analysis failed.",
+                "futureImplications": "Future implications analysis failed.",
+                "researchSignificance": "incremental",
+                "impactScore": 3.0
+            })
+        
+        # Add practical assessment
+        if isinstance(practical, dict):
+            combined_result.update(practical)
+        else:
+            combined_result.update({
+                "practicalApplicability": "medium",
+                "implementationComplexity": "medium",
+                "hasCode": False,
+                "difficultyLevel": "intermediate",
+                "readingTime": 10
+            })
+        
+        print(f"Multi-stage analysis completed for: {title}")
+        
+        # Cache the complete analysis result
+        cache_analysis(title, abstract, combined_result, "full")
+        return combined_result
+        
+    except Exception as e:
+        print(f"Error in multi-stage analysis: {e}")
+        return {
+            "summary": "Could not generate analysis due to an error.",
             "keyContribution": "N/A",
             "novelty": "N/A",
             "technicalInnovation": "Analysis unavailable due to processing error.",
@@ -157,6 +427,34 @@ async def generate_summary(abstract: str, title: str) -> dict:
             "researchSignificance": "incremental",
             "reproductionDifficulty": "medium"
         }
+
+async def batch_generate_summaries(papers_data: list) -> list:
+    """Batch process multiple papers for analysis"""
+    print(f"Starting batch analysis for {len(papers_data)} papers")
+    
+    # Create tasks for all papers
+    tasks = []
+    for paper in papers_data:
+        task = generate_summary(paper['abstract'], paper['title'])
+        tasks.append(task)
+    
+    # Process all papers concurrently with a reasonable limit
+    batch_size = 5  # Process 5 papers at a time to avoid API rate limits
+    results = []
+    
+    for i in range(0, len(tasks), batch_size):
+        batch_tasks = tasks[i:i + batch_size]
+        print(f"Processing batch {i//batch_size + 1}/{(len(tasks) + batch_size - 1)//batch_size}")
+        
+        batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+        results.extend(batch_results)
+        
+        # Small delay between batches to respect API limits
+        if i + batch_size < len(tasks):
+            await asyncio.sleep(2)
+    
+    print(f"Batch analysis completed for {len(papers_data)} papers")
+    return results
 
 async def generate_and_save_summary(
     arxiv_id: str,
@@ -445,3 +743,88 @@ async def contextual_search(
     except Exception as e:
         print(f"ERROR: An unexpected error occurred in contextual_search: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+# Pydantic models for batch processing
+class PaperData(BaseModel):
+    title: str
+    abstract: str
+    arxiv_id: str = None
+
+class BatchAnalysisRequest(BaseModel):
+    papers: List[PaperData]
+
+@app.post("/papers/batch-analyze")
+async def batch_analyze_papers(request: BatchAnalysisRequest):
+    """Batch analyze multiple papers for comprehensive insights"""
+    try:
+        if not request.papers:
+            raise HTTPException(status_code=400, detail="No papers provided for analysis")
+        
+        if len(request.papers) > 20:
+            raise HTTPException(status_code=400, detail="Maximum 20 papers allowed per batch")
+        
+        print(f"Starting batch analysis for {len(request.papers)} papers")
+        
+        # Convert to the format expected by batch_generate_summaries
+        papers_data = []
+        for paper in request.papers:
+            papers_data.append({
+                'title': paper.title,
+                'abstract': paper.abstract,
+                'arxiv_id': paper.arxiv_id
+            })
+        
+        # Process all papers using our batch function
+        analysis_results = await batch_generate_summaries(papers_data)
+        
+        # Combine paper data with analysis results
+        response_data = []
+        for i, paper in enumerate(request.papers):
+            analysis = analysis_results[i] if i < len(analysis_results) else None
+            
+            if isinstance(analysis, Exception):
+                analysis = {
+                    "summary": f"Analysis failed: {str(analysis)}",
+                    "keyContribution": "N/A",
+                    "novelty": "N/A",
+                    "technicalInnovation": "Analysis failed",
+                    "methodologyBreakdown": "Analysis failed",
+                    "performanceHighlights": "Analysis failed",
+                    "implementationInsights": "Analysis failed",
+                    "researchContext": "Analysis failed",
+                    "futureImplications": "Analysis failed",
+                    "limitations": "Analysis failed",
+                    "impactScore": 3.0,
+                    "difficultyLevel": "intermediate",
+                    "readingTime": 10,
+                    "hasCode": False,
+                    "implementationComplexity": "medium",
+                    "practicalApplicability": "medium",
+                    "researchSignificance": "incremental",
+                    "reproductionDifficulty": "medium"
+                }
+            
+            response_data.append({
+                "title": paper.title,
+                "abstract": paper.abstract,
+                "arxiv_id": paper.arxiv_id,
+                "analysis": analysis
+            })
+        
+        print(f"Batch analysis completed successfully for {len(request.papers)} papers")
+        return {"results": response_data, "total_processed": len(response_data)}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Batch analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {e}")
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "redis_connected": redis_client is not None,
+        "gemini_configured": bool(GEMINI_API_KEY)
+    }
