@@ -93,7 +93,7 @@ class PaperSearchParams(BaseModel):
 class BatchAnalysisRequest(BaseModel):
     """Schema for batch analysis request"""
     papers: List[Dict[str, Any]] = Field(..., description="List of papers to analyze")
-    
+
     class Config:
         schema_extra = {
             "example": {
@@ -105,3 +105,21 @@ class BatchAnalysisRequest(BaseModel):
                 ]
             }
         }
+
+
+class ContextualSearchRequest(BaseModel):
+    """Schema for contextual search request"""
+    description: str = Field(..., min_length=10, description="Project description to find relevant papers")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "description": "I am building a mobile app that identifies plant species from a photo taken by the user. I need to know the best models for high-accuracy, on-device image classification."
+            }
+        }
+
+
+class ContextualSearchResponse(BaseModel):
+    """Schema for contextual search response"""
+    analysis: str = Field(..., description="AI-generated analysis and recommendations")
+    papers: List[Dict[str, str]] = Field(..., description="Relevant papers found")

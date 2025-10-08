@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Paper } from '../types/Paper';
 import PaperDetailModal from './PaperDetailModal';
 import SmartBadges from './SmartBadges';
+import CodeRepositories from './CodeRepositories';
 
 interface PaperListProps {
   papers: Paper[];
@@ -57,6 +58,11 @@ const PaperList: React.FC<PaperListProps> = ({ papers }) => {
             <h4 style={{ fontSize: '16px', color: 'var(--accent-blue)', marginBottom: '4px' }}>Novelty</h4>
             <p style={{ color: 'var(--secondary-text)' }}>{paper.aiSummary.novelty}</p>
           </div>
+
+          {/* Code Repositories Section */}
+          {paper.aiSummary.codeAvailability && (
+            <CodeRepositories codeAvailability={paper.aiSummary.codeAvailability} />
+          )}
 
           <details style={{ marginBottom: '24px' }}>
             <summary style={{ cursor: 'pointer', color: 'var(--accent-blue)', fontSize: '14px' }}>View AI Summary & Original Abstract</summary>

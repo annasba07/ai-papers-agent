@@ -1,5 +1,5 @@
-# AI Paper Digest v2.0 Backend Dockerfile
-# Optimized for production deployment on Render
+# AI Paper Digest Backend Dockerfile
+# Optimized for production deployment
 
 FROM python:3.11-slim
 
@@ -40,4 +40,4 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # Start command
-CMD ["uvicorn", "main_v2:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

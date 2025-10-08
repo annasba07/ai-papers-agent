@@ -7,14 +7,17 @@ from typing import Dict, Any, List
 import google.generativeai as genai
 from app.core.config import settings
 from app.services.cache_service import cache_service
+from app.services.code_detection_service import code_detection_service
 from app.utils.logger import LoggerMixin
 from app.utils.exceptions import AIAnalysisException, RateLimitException
 
 
 class AIAnalysisService(LoggerMixin):
     """Service for handling AI-powered paper analysis"""
-    
+
     def __init__(self):
+        from app.core.config import validate_settings
+        validate_settings()  # Validate API key is present
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
         self.log_info("AI Analysis Service initialized")
@@ -187,31 +190,54 @@ class AIAnalysisService(LoggerMixin):
             self.log_error("Basic summary generation failed", error=e, title=title)
             raise AIAnalysisException(f"Basic summary generation failed: {str(e)}", error_code="BASIC_SUMMARY_ERROR")
     
-    async def generate_comprehensive_analysis(self, abstract: str, title: str) -> Dict[str, Any]:
+    async def generate_comprehensive_analysis(
+        self,
+        abstract: str,
+        title: str,
+        authors: List[str] = None,
+        arxiv_id: str = None
+    ) -> Dict[str, Any]:
         """Generate comprehensive analysis using all stages"""
         self.log_info("Starting comprehensive analysis", title=title)
-        
+
         # Check cache first
         cached_result = cache_service.get_cached_analysis(title, abstract, "full")
         if cached_result:
             self.log_info("Using cached analysis", title=title)
             return cached_result
-        
+
         # Run all analysis stages in parallel
         try:
             self.log_info("Running parallel analysis stages", title=title)
-            
-            # Create tasks for all stages
+
+            # Create tasks for all stages (including code detection)
             tasks = [
                 self.generate_technical_analysis(abstract, title),
                 self.generate_research_context(abstract, title),
                 self.generate_practical_assessment(abstract, title),
                 self.generate_basic_summary(abstract, title)
             ]
+
+            # Add code detection if we have author info
+            if authors and arxiv_id:
+                tasks.append(
+                    code_detection_service.detect_code_from_paper(
+                        title=title,
+                        abstract=abstract,
+                        authors=authors,
+                        arxiv_id=arxiv_id
+                    )
+                )
             
             # Execute all tasks with exception handling
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            technical, context, practical, basic = results
+
+            # Unpack results (code detection is optional last item)
+            if authors and arxiv_id:
+                technical, context, practical, basic, code_info = results
+            else:
+                technical, context, practical, basic = results
+                code_info = {"hasCode": False, "officialRepo": None, "communityRepos": [], "totalRepos": 0}
             
             # Handle any stage failures with fallback data
             if isinstance(technical, Exception):
@@ -229,13 +255,18 @@ class AIAnalysisService(LoggerMixin):
             if isinstance(basic, Exception):
                 self.log_warning("Basic summary stage failed, using fallback", error=str(basic))
                 basic = {"summary": "Summary unavailable", "novelty": "Novelty assessment unavailable", "technicalInnovation": "Technical innovation unclear"}
-            
+
+            if isinstance(code_info, Exception):
+                self.log_warning("Code detection failed, using fallback", error=str(code_info))
+                code_info = {"hasCode": False, "officialRepo": None, "communityRepos": [], "totalRepos": 0}
+
             # Combine all analyses
             comprehensive_analysis = {
                 **basic,
                 **technical,
                 **context,
-                **practical
+                **practical,
+                "codeAvailability": code_info  # Add code detection results
             }
             
             # Cache the successful result
@@ -265,8 +296,10 @@ class AIAnalysisService(LoggerMixin):
             batch_tasks = []
             for paper in batch:
                 task = self.generate_comprehensive_analysis(
-                    paper.get('summary', ''),
-                    paper.get('title', '')
+                    abstract=paper.get('summary', ''),
+                    title=paper.get('title', ''),
+                    authors=paper.get('authors', []),
+                    arxiv_id=paper.get('id', '')
                 )
                 batch_tasks.append(task)
             

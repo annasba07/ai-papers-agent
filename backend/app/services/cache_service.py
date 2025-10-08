@@ -1,27 +1,70 @@
 """
-Redis caching service for paper analysis
+Caching service for paper analysis with Redis and in-memory fallback
 """
 import json
 import hashlib
-import redis
 from typing import Optional, Dict, Any
+from datetime import datetime, timedelta
 from app.core.config import settings
 from app.utils.logger import LoggerMixin
-from app.utils.exceptions import CacheException
+
+
+class InMemoryCache:
+    """Simple in-memory cache fallback when Redis is unavailable"""
+
+    def __init__(self):
+        self._cache: Dict[str, tuple[str, datetime]] = {}
+
+    def get(self, key: str) -> Optional[str]:
+        """Get value from cache if not expired"""
+        if key in self._cache:
+            value, expiry = self._cache[key]
+            if datetime.now() < expiry:
+                return value
+            else:
+                # Expired, remove it
+                del self._cache[key]
+        return None
+
+    def setex(self, key: str, ttl: int, value: str) -> None:
+        """Set value with expiration"""
+        expiry = datetime.now() + timedelta(seconds=ttl)
+        self._cache[key] = (value, expiry)
+
+    def delete(self, key: str) -> int:
+        """Delete key from cache"""
+        if key in self._cache:
+            del self._cache[key]
+            return 1
+        return 0
+
+    def keys(self, pattern: str) -> list:
+        """Get keys matching pattern (simple prefix match)"""
+        prefix = pattern.replace("*", "")
+        return [k for k in self._cache.keys() if k.startswith(prefix)]
 
 
 class CacheService(LoggerMixin):
-    """Service for handling Redis caching operations"""
-    
+    """Service for handling caching operations with Redis or in-memory fallback"""
+
     def __init__(self):
+        self.redis_client = None
+        self.use_redis = False
+
+        # Try to connect to Redis
         try:
+            import redis
             self.redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
             # Test connection
             self.redis_client.ping()
-            self.log_info("Cache service initialized successfully")
+            self.use_redis = True
+            self.log_info("Cache service initialized with Redis")
+        except ImportError:
+            self.log_warning("Redis package not installed, using in-memory cache")
+            self.redis_client = InMemoryCache()
         except Exception as e:
-            self.log_error("Failed to initialize cache service", error=e)
-            raise CacheException(f"Redis connection failed: {str(e)}", error_code="CACHE_INIT_ERROR")
+            self.log_warning("Redis unavailable, using in-memory cache", error=str(e))
+            self.redis_client = InMemoryCache()
     
     def _generate_cache_key(self, title: str, abstract: str, analysis_type: str = "full") -> str:
         """Generate a unique cache key for paper analysis"""
