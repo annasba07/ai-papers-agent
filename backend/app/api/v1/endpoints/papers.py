@@ -349,3 +349,87 @@ async def generate_code_for_paper(paper_id: str):
             status_code=500,
             detail=f"Code generation failed: {str(e)}"
         )
+
+
+@router.post("/{paper_id}/generate-code-simple")
+async def generate_code_simple(paper_id: str):
+    """
+    Generate working code for a paper using elegant single-conversation approach
+
+    This endpoint uses a simplified architecture where Claude self-orchestrates
+    the entire pipeline through extended context and tool use.
+
+    Advantages over multi-agent approach:
+    - 300 lines instead of 4,000
+    - Single conversation with self-correction
+    - Simpler to debug and maintain
+    - Claude naturally adapts the pipeline
+
+    Based on: Claude Sonnet 4 extended context + tool use
+    """
+    try:
+        from app.agents.simple_generator import get_simple_generator
+
+        # Get paper details
+        paper = await arxiv_service.get_paper_by_id(paper_id)
+
+        if not paper:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        # Get AI analysis if not already present
+        if 'aiSummary' not in paper:
+            ai_summary = await ai_analysis_service.generate_comprehensive_analysis(
+                paper.get('summary', ''),
+                paper.get('title', ''),
+                paper.get('authors', []),
+                paper_id
+            )
+            paper['aiSummary'] = ai_summary
+
+        # Get simple generator (global instance)
+        generator = get_simple_generator()
+
+        # Generate code using elegant approach
+        result = await generator.generate(
+            paper_title=paper['title'],
+            paper_abstract=paper['summary'],
+            paper_id=paper_id,
+            paper_category=paper.get('category', 'cs.AI')
+        )
+
+        # Return formatted response
+        return {
+            "success": result.success,
+            "generation_time": result.generation_time_seconds,
+            "approach": "simple",  # Mark which approach was used
+            "paper": {
+                "id": result.paper_id,
+                "title": result.paper_title
+            },
+            "code": {
+                "model": result.code,
+                "config": result.config,
+                "utils": None,  # Simple approach may not generate utils
+                "example": result.example
+            },
+            "tests": {
+                "code": result.tests,
+                "total": result.tests_total,
+                "passed": result.tests_passed,
+                "failed": result.tests_failed
+            },
+            "metadata": {
+                "complexity": result.complexity,
+                "debug_iterations": result.debug_iterations
+            },
+            "readme": result.readme,
+            "reflection": result.reflection
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Simple code generation failed: {str(e)}"
+        )
