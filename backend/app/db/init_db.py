@@ -15,8 +15,8 @@ from app.db.models import Base
 
 # SQL for pgvector extension and triggers
 EXTENSION_SQL = """
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension (Supabase recommended syntax)
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 
 -- Enable full-text search
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -101,6 +101,18 @@ CREATE TRIGGER concept_paper_count_trigger
     FOR EACH ROW EXECUTE FUNCTION update_concept_paper_count();
 """
 
+# Vector indexes using HNSW (Supabase recommended over IVFFlat)
+VECTOR_INDEXES_SQL = """
+-- HNSW index for paper embeddings (cosine distance)
+-- HNSW adapts well to changing data and can be created immediately
+CREATE INDEX IF NOT EXISTS papers_embedding_idx ON papers
+    USING hnsw (embedding vector_cosine_ops);
+
+-- Optional: HNSW index for concept embeddings
+CREATE INDEX IF NOT EXISTS concepts_embedding_idx ON concepts
+    USING hnsw (embedding vector_cosine_ops);
+"""
+
 # Materialized views for common queries
 VIEWS_SQL = """
 -- Top papers by citations (refreshed periodically)
@@ -171,6 +183,17 @@ async def create_triggers():
     except Exception as e:
         print(f"❌ Trigger creation failed: {e}")
         raise
+
+
+async def create_vector_indexes():
+    """Create HNSW vector indexes for embeddings"""
+    print("🔍 Creating vector indexes (HNSW)...")
+    try:
+        async with database.transaction():
+            await database.execute(text(VECTOR_INDEXES_SQL))
+        print("✅ Vector indexes created successfully")
+    except Exception as e:
+        print(f"⚠️  Vector index creation warning: {e}")
 
 
 async def create_views():
@@ -245,10 +268,13 @@ async def init_database():
         # Step 3: Triggers
         await create_triggers()
 
-        # Step 4: Views
+        # Step 4: Vector Indexes
+        await create_vector_indexes()
+
+        # Step 5: Views
         await create_views()
 
-        # Step 5: Verify
+        # Step 6: Verify
         success = await verify_setup()
 
         print("\n" + "=" * 60)

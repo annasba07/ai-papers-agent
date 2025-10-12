@@ -220,11 +220,10 @@ CREATE TABLE paper_relationships (
 -- ================================================================
 
 -- 1. Vector Similarity Search (Query 1)
--- IVFFlat index for approximate nearest neighbor search
+-- HNSW index for approximate nearest neighbor search (Supabase recommended)
 CREATE INDEX papers_embedding_idx ON papers
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
--- Adjust lists = sqrt(rows) for optimal performance
+USING hnsw (embedding vector_cosine_ops);
+-- HNSW adapts to data growth automatically, no tuning needed
 
 -- 2. Citation Graph Traversal (Query 3)
 -- Bidirectional citation lookup

@@ -24,10 +24,10 @@ The knowledge graph system is now **fully implemented** and ready for use! This 
 - ✅ **Paper_relationships table** - Precomputed similarities
 
 **Features:**
-- 23 strategic indexes for <100ms queries on 1M+ papers
+- 25 strategic indexes for <100ms queries on 1M+ papers (including 2 HNSW vector indexes)
 - Auto-updating triggers (citation counts, search vectors)
 - Materialized views for trending papers and concepts
-- IVFFlat indexes for approximate nearest neighbor search
+- HNSW indexes for fast vector similarity search (Supabase recommended)
 
 ### 🧠 Phase 2: AI Services (COMPLETE)
 
@@ -431,24 +431,22 @@ curl -X POST http://localhost:8000/api/v1/knowledge-graph/embeddings/backfill
 
 **Problem**: Vector similarity queries take >1 second.
 
-**Solution**: Ensure IVFFlat index exists and has proper configuration.
+**Solution**: Ensure HNSW index exists (Supabase recommended over IVFFlat).
 
 ```sql
 -- Check if index exists
 SELECT indexname FROM pg_indexes WHERE tablename = 'papers' AND indexname LIKE '%embedding%';
 
--- If no index or small dataset, create/recreate:
-DROP INDEX IF EXISTS papers_embedding_idx;
-CREATE INDEX papers_embedding_idx ON papers
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);  -- Adjust lists based on dataset size
+-- If no index, create it (HNSW is now recommended):
+CREATE INDEX IF NOT EXISTS papers_embedding_idx ON papers
+  USING hnsw (embedding vector_cosine_ops);
 ```
 
-For datasets:
-- <10K papers: lists = 10
-- 10K-100K: lists = 100
-- 100K-1M: lists = 500
-- >1M: lists = 1000
+**Why HNSW?** Supabase now recommends HNSW (Hierarchical Navigable Small World) because:
+- Can be created immediately (doesn't need pre-populated data)
+- Adapts well as data grows
+- Better performance and robustness
+- No parameter tuning needed
 
 ### Connection errors
 

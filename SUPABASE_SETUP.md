@@ -28,12 +28,18 @@ Complete guide to setting up the knowledge graph database with Supabase.
 
 1. In your Supabase dashboard, go to **Settings** → **Database**
 2. Scroll to **Connection string** section
-3. Select **URI** tab
-4. Copy the connection string (looks like):
+3. **Choose the right connection mode:**
+   - **Session Mode (Recommended for this project)** - Use for persistent connections with connection pooling
+   - Transaction Mode - For serverless/edge functions only
+   - Direct Connection - For persistent servers (IPv6 only)
+
+4. Copy the **Session Mode** connection string (looks like):
    ```
-   postgresql://postgres:[YOUR-PASSWORD]@db.xxxxxxxxxxxxxx.supabase.co:5432/postgres
+   postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
    ```
 5. Replace `[YOUR-PASSWORD]` with your actual database password
+
+**Why Session Mode?** Our FastAPI backend uses connection pooling (databases + asyncpg), which works best with Session Mode. Transaction Mode requires disabling prepared statements and is designed for transient connections.
 
 ---
 
@@ -78,9 +84,11 @@ Supabase includes pgvector, but you need to enable it:
 1. Go to **SQL Editor** in your Supabase dashboard
 2. Run this SQL:
    ```sql
-   CREATE EXTENSION IF NOT EXISTS vector;
+   CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
    ```
 3. Click "Run"
+
+**Note**: Supabase recommends creating extensions in the `extensions` schema for better organization and security.
 
 ### Option B: Via Migration Script
 
@@ -238,7 +246,7 @@ python test_db_connection.py
 ### Indexes Created (23 total)
 
 **Vector search:**
-- `papers_embedding_idx` - IVFFlat index for fast cosine similarity
+- `papers_embedding_idx` - HNSW index for fast cosine similarity
 
 **Citation queries:**
 - `citations_citing_idx`, `citations_cited_idx` - Graph traversal
@@ -371,20 +379,20 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ### Slow vector queries
 
 **Solution**:
-1. Ensure IVFFlat index exists:
+1. Ensure HNSW index exists (Supabase recommended):
    ```sql
    SELECT indexname FROM pg_indexes WHERE tablename = 'papers' AND indexname LIKE '%embedding%';
    ```
 2. If no index, create it:
    ```sql
-   CREATE INDEX papers_embedding_idx ON papers USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+   CREATE INDEX IF NOT EXISTS papers_embedding_idx ON papers USING hnsw (embedding vector_cosine_ops);
    ```
-3. For 1M+ papers, increase lists:
-   ```sql
-   -- Drop and recreate with more lists
-   DROP INDEX papers_embedding_idx;
-   CREATE INDEX papers_embedding_idx ON papers USING ivfflat (embedding vector_cosine_ops) WITH (lists = 500);
-   ```
+
+**Why HNSW?** Supabase recommends HNSW (Hierarchical Navigable Small World) over IVFFlat because:
+- Adapts well to changing data - can be created immediately
+- Better performance and robustness
+- No parameter tuning needed (no 'lists' or 'probes')
+- Self-optimizing as data grows
 
 ### Out of disk space (free tier)
 

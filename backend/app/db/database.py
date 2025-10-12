@@ -2,6 +2,9 @@
 Database connection and session management for Supabase PostgreSQL
 
 Uses asyncpg via databases library for async operations.
+
+IMPORTANT: Use Supabase Session Mode (port 5432) connection string for this setup.
+Transaction Mode (port 6543) requires additional configuration (statement_cache_size=0).
 """
 import os
 from typing import Optional
@@ -11,16 +14,19 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Supabase connection URL from environment
+# Recommended: Use Session Mode connection string from Supabase dashboard
+# Format: postgresql://postgres.xxx:[PASSWORD]@aws-0-xx.pooler.supabase.com:5432/postgres
 DATABASE_URL = os.getenv(
     "SUPABASE_DATABASE_URL",
     os.getenv("DATABASE_URL", "postgresql://localhost/ai_papers")
 )
 
 # For async operations (FastAPI)
+# Configuration optimized for Supabase Session Mode with connection pooling
 database = Database(
     DATABASE_URL,
-    min_size=5,
-    max_size=20
+    min_size=5,          # Minimum connections in pool
+    max_size=20          # Maximum connections in pool
 )
 
 # For SQLAlchemy models
