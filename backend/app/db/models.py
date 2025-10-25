@@ -192,7 +192,7 @@ class Benchmark(Base):
 
     # Metadata
     reported_date = Column(DateTime, nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    extra_metadata = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
