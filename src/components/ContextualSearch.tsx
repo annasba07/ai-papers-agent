@@ -12,6 +12,7 @@ interface SearchResult {
 }
 
 const ContextualSearch = () => {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
   const [description, setDescription] = useState('');
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ const ContextualSearch = () => {
       
       // Step 3: Generating insights (actual API call)
       setCurrentStep(2);
-      const response = await fetch('http://localhost:8000/papers/contextual-search', {
+      const response = await fetch(`${API_BASE_URL}/papers/contextual-search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description }),
