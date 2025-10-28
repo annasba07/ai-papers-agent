@@ -1,388 +1,135 @@
-# 🚀 AI Papers Agent → Production Platform Roadmap
+# 🚀 AI Papers Agent — Research Atlas Roadmap
 
-**Vision:** Help AI researchers go from paper → production code in hours, not months
+**North Star:** Help AI teams move from idea → production-grade implementation in hours by giving them a living map of the AI research universe and the tools to execute on it.
 
-**Inspired by:** Periodic Labs' approach to automating scientific discovery
-
----
-
-## 📊 Current Status: ~15% Complete
-
-### ✅ What's Built (Foundation - v0.1)
-
-- [x] Paper discovery from arXiv
-- [x] AI-powered comprehensive analysis (Gemini)
-- [x] Contextual search (project → relevant papers)
-- [x] Impact/difficulty scoring
-- [x] Smart categorization
-- [x] Clean architecture (FastAPI + Next.js)
-- [x] Caching with Redis fallback
-- [x] **NEW: Code detection service** ✨
+**Guiding Principles**
+- Treat research as a graph, not a list. Everything connects: papers ↔ techniques ↔ datasets ↔ benchmarks ↔ institutions ↔ people.
+- Capture signals continuously (publications, citations, repos, benchmarks) and reason over their trajectories.
+- Wrap insights in opinionated workflows that answer, “What should I do next and why?”
+- Keep implementation acceleration (code generation, testing, debugging) as the compounding force on top of intelligence.
 
 ---
 
-## 🎯 12-Week Execution Plan
+## 📚 Pillars
 
-### **Phase 1: Deep Understanding** (Weeks 1-4) → 3x More Valuable
+1. **Living Research Graph**
+   - Unified ontology for papers, techniques, tasks, datasets, benchmarks, institutions, and authors.
+   - Semantic embeddings + citation/affiliation edges + co-usage relationships.
+   - APIs and graph-query layer for flexible traversal.
 
-#### Week 1: Code Detection & GitHub Integration ✅ IN PROGRESS
-**Status:** Shipping now!
+2. **Deep Paper Intelligence**
+   - Gemini-driven analysis + PDF table parsing.
+   - Extraction of techniques, metrics, compute requirements, novelty signals, and reproducibility cues.
+   - Benchmark deltas and SOTA tracking backed by structured storage.
 
-**Features:**
-- [x] Code detection service
-- [x] GitHub API integration
-- [x] Repository quality scoring
-- [x] Official vs community repo classification
-- [ ] Frontend UI for code repositories
-- [ ] Test with real papers
+3. **Exploratory Atlas UI**
+   - Multi-scale visualizations: global topic map, technique timelines, benchmark leaderboards.
+   - Guided exploration flows for “solve my problem,” “compare methods,” and “find what’s trending.”
+   - Project planning canvases that turn insights into actionable plans.
 
-**Deliverables:**
-- Papers now show available code implementations
-- Ranked by quality (stars, recency, official status)
-- Direct links to GitHub repos
-
-**Success Metrics:**
-- 80%+ of ML papers have code detected
-- Quality scores correlate with actual usefulness
+4. **Implementation Acceleration**
+   - Multi-agent code generation orchestrator with testing and debugging loops.
+   - Asset packs (code, configs, eval scripts) tailored to the chosen technique.
+   - Feedback loops that learn from execution outcomes and user edits.
 
 ---
 
-#### Week 2: Benchmark Extraction & SOTA Tracking
-**Goal:** Extract performance metrics from papers automatically
+## ✅ Current Foundation
 
-**Features to Build:**
-- [ ] PDF table extraction (results tables)
-- [ ] Benchmark dataset detection (ImageNet, COCO, etc.)
-- [ ] Metric extraction (accuracy, F1, BLEU, etc.)
-- [ ] SOTA comparison (how does this compare to current best?)
-- [ ] Performance trend visualization
-
-**Technical Approach:**
-- Use Gemini Vision API to extract tables from PDFs
-- Build benchmark database (dataset → current SOTA)
-- Parse paper text for metric mentions
-- Compare claimed results to known benchmarks
-
-**UI Components:**
-```
-📊 Benchmark Results
-Dataset: ImageNet-1K
-Metric: Top-1 Accuracy
-This Paper: 87.2%
-Previous SOTA: 86.1%
-Improvement: +1.1% ✅
-
-[View Full Benchmarks]
-```
-
-**Success Metrics:**
-- Extract benchmarks from 60%+ of papers
-- <5% error rate on metric extraction
-- SOTA tracking for top 20 benchmarks
+- Async FastAPI backend with service boundaries (arXiv, AI analysis, embeddings, ingestion, similarity, agents).
+- Next.js 15 frontend with contextual search, paper browsing, and detailed AI-generated insight views.
+- Gemini-based analysis pipeline producing structured summaries, significance scores, and applicability metadata.
+- Code detection service (GitHub search + heuristics) feeding UI badges.
+- Knowledge graph groundwork via Supabase/Postgres schema and ingestion jobs.
 
 ---
 
-#### Week 3: Trending Papers & Hot Topics
-**Goal:** Show what's gaining traction in AI research
+## 🛠️ Phase Plan
 
-**Features:**
-- [ ] Trending papers (last 7/30/90 days)
-- [ ] Hot topics detection (technique momentum)
-- [ ] Citation velocity tracking
-- [ ] Breakout paper identification
-- [ ] Field momentum indicators
+### Phase 1 — Graph & Signals (Weeks 1-4)
+**Goal:** Evolve from paper list → connected research graph enriched with high-value signals.
 
-**Technical Approach:**
-- Track paper mentions over time
-- Calculate citation acceleration
-- Detect technique crossover (e.g., "diffusion + video")
-- Monitor conference acceptances
+1. **Graph Schema & Normalization**
+   - Finalize ontology (paper, technique, task, dataset, benchmark, organization, author).
+   - Implement normalization pipeline (alias resolution, concept canonicalization).
+   - Store in Postgres + vector DB; expose via Hasura/GraphQL or custom resolvers.
+2. **Citation & Similarity Enrichment**
+   - Integrate OpenAlex/Semantic Scholar for citation data.
+   - Compute similarity embeddings (paper-to-paper, technique-to-technique).
+   - Add co-author, co-citation, shared-dataset edges.
+3. **Signal Ingestion Jobs**
+   - Extend ingestion to capture GitHub stats, benchmark metrics (Papers With Code), conference acceptances.
+   - Build incremental ETL jobs (dbt/Spark) for momentum metrics (velocity, acceleration, novelty).
 
-**UI Components:**
-```
-🔥 Trending This Week
-1. Mixture of Experts ↑ 340%
-   23 papers, 892 citations (up from 261)
+**Milestone:** API can answer graph questions like “what techniques are rising for real-time control?” with supporting metrics.
 
-2. Diffusion for Video ↑ 220%
-   15 papers, 441 citations
+### Phase 2 — Insight Surfaces (Weeks 5-8)
+**Goal:** Let users explore the map and understand frontier movement at a glance.
 
-3. Constitutional AI ↑ 180%
-   8 papers, 318 citations
-```
+1. **Atlas Visualizations**
+   - Force-directed/global map of research topics (react-force-graph or deck.gl).
+   - Timeline views for techniques/datasets showing key papers and metric jumps.
+   - Benchmark dashboards with historical SOTA, methodology notes, compute costs.
+2. **Exploration Workflows**
+   - Guided problem decomposition: user describes goal → system surfaces subproblems, candidate techniques, evaluation checklists.
+   - Comparison mode: side-by-side diff of two techniques (benchmark performance, complexity, maturity, code availability).
+   - Trend trackers: weekly “hot topics” digest with underlying metrics.
+3. **Contextual Reasoning API**
+   - Natural-language graph query layer (LLM translating to Cypher/SQL).
+   - Narrative summaries (e.g., “Diffusion models in robotics: 3 emerging approaches, top paper summaries, code links, open risks.”)
 
-**Success Metrics:**
-- Trending list updated daily
-- Identifies breakouts within 48 hours
-- 90% precision on "hot topic" detection
+**Milestone:** Researchers can visually explore, compare, and plan from the web UI without raw data dives.
 
----
+### Phase 3 — Implementation Engine (Weeks 9-12)
+**Goal:** Turn insights into runnable, high-quality code bundles.
 
-#### Week 4: Method Comparison & Evolution Timeline
-**Goal:** Compare techniques and show their evolution
+1. **Agent Orchestration Hardening**
+   - Formalize multi-agent roles (analyzer, designer, coder, tester, debugger).
+   - Persist agent memory/outcome metrics for continual improvement.
+   - Add guardrails: spec validation, hallucination detection, policy checks.
+2. **Technique Playbooks**
+   - Pre-build playbooks for top 20 techniques (LoRA, diffusion, ViT, MoE, etc.).
+   - Each playbook = architecture summary, config template, dataset prep, evaluation harness.
+3. **Execution Loop**
+   - Integrate with containerized sandbox for running generated code & tests.
+   - Support iterative refinement (capture failures, update prompts, re-run).
+   - Surface success/failure analytics back into graph (implementation maturity score).
 
-**Features:**
-- [ ] Side-by-side method comparison
-- [ ] Technique evolution timeline
-- [ ] Performance vs complexity tradeoffs
-- [ ] "When to use" recommendations
-- [ ] Migration guides (RNN → Transformer)
-
-**UI Example:**
-```
-📈 Vision Transformers vs CNNs
-
-2020: ViT emerges (85% ImageNet)
-2021: ViT matches CNNs (86.5%)
-2022: ViT surpasses CNNs (88.2%)
-2023: 80% of new papers use ViT
-2024: CNNs mostly deprecated
-
-When to use:
-✅ ViT: Large datasets, compute available
-⚠️ CNN: Small data, efficiency critical
-```
-
-**Success Metrics:**
-- Compare 50+ technique pairs
-- Evolution timelines for 20+ methods
-- User engagement on comparison pages
+**Milestone:** User selects technique → receives runnable repo with tests + docs, validated by automated execution.
 
 ---
 
-### **Phase 2: Implementation Acceleration** (Weeks 5-7) → 10x More Valuable
+## 📈 Supporting Workstreams
 
-#### Weeks 5-6: Code Generation Engine 🎯 KILLER FEATURE
-**Goal:** Generate production-ready code from papers
-
-**Features:**
-- [ ] Architecture code generation (PyTorch/JAX)
-- [ ] Method translation (equations → code)
-- [ ] Hyperparameter extraction
-- [ ] Training loop templates
-- [ ] Inference script generation
-
-**Technical Approach:**
-```python
-# Input: Paper PDF + method description
-# Output: Clean, working PyTorch implementation
-
-# Use Claude/GPT-4 with:
-1. Paper context (architecture diagrams, equations)
-2. Few-shot examples (known good implementations)
-3. Code quality checks (syntax, best practices)
-4. Testing (does it run?)
-```
-
-**UI Workflow:**
-```
-User: "Implement LoRA for LLM fine-tuning"
-
-AI Agent:
-1. Analyzes LoRA paper
-2. Generates PyTorch implementation
-3. Extracts hyperparameters from paper
-4. Provides integration guide
-
-Output:
-✅ lora_layer.py (120 lines)
-✅ config.yaml (paper hyperparams)
-✅ integration_guide.md
-✅ example_usage.py
-```
-
-**Success Metrics:**
-- Generated code runs without errors (90%+)
-- Matches paper architecture (95%+)
-- Saves 20-40 hours of implementation time
-- First paid users convert on this feature
+- **Data Quality & Observability**
+  - Monitoring dashboards for ingestion freshness, API latency, and agent success rates.
+  - Manual review interface for concept/metric extraction accuracy.
+- **Developer Experience**
+  - Tooling to replay analyses, trace agent decisions, and patch prompts safely.
+  - CLI for power users to query graph and trigger ingestion runs.
+- **Partnership & Integrations**
+  - Hook into institutional repositories, ArXiv overlays, benchmark communities.
+  - Optional user-driven curation (stars, notes, replication results) to enrich graph.
 
 ---
 
-#### Week 7: Implementation Guides & Config Extraction
-**Goal:** Make integration into existing codebases trivial
+## 🪜 Implementation Sequencing Cheat Sheet
 
-**Features:**
-- [ ] "Add to your codebase" step-by-step guides
-- [ ] Configuration file generation
-- [ ] Dependency management
-- [ ] Common gotchas & tips
-- [ ] Migration helpers
-
-**UI Example:**
-```
-🔧 Add LoRA to Your Transformer (3 steps)
-
-Step 1: Install dependencies
-pip install peft torch
-
-Step 2: Modify your model
-[Show code diff]
-
-Step 3: Update training config
-[Generated config with paper hyperparams]
-
-⚠️ Common Issues:
-- Increase learning rate 2-3x
-- Start with rank=4 for iteration
-```
-
-**Success Metrics:**
-- Integration time <30 minutes
-- 80% success rate on first try
-- User feedback >4/5 stars
+| Week | Focus | Key Deliverables |
+|------|-------|------------------|
+| 1 | Ontology + Graph schema | ERD, migration set, initial loaders |
+| 2 | Concept normalization | Alias resolver, embedding-based clustering |
+| 3 | Citation + similarity edges | OpenAlex ingestion, similarity jobs |
+| 4 | Signal metrics | Benchmark ETL, momentum calculations |
+| 5 | Atlas prototype | Topic map with drill-down |
+| 6 | Trend pipeline | Hot topics service + API |
+| 7 | Comparison workflows | Technique diff endpoint + UI |
+| 8 | Problem-to-plan UX | Guided flow MVP |
+| 9 | Agent orchestration v2 | Role definitions, evaluation harness |
+|10 | Playbook library | 10 core technique templates |
+|11 | Execution sandbox | Containerized run + logging |
+|12 | Launch alpha | End-to-end “idea → code bundle” demo |
 
 ---
 
-### **Phase 3: Community & Validation** (Weeks 8-10) → Network Effects
-
-#### Week 8: Paid Tiers & Monetization 💰
-**Goal:** Launch revenue, user accounts
-
-**Features:**
-- [ ] User authentication (email/GitHub)
-- [ ] Subscription tiers (Free/Pro/Team)
-- [ ] Usage tracking & limits
-- [ ] Payment processing (Stripe)
-- [ ] Dashboard & analytics
-
-**Pricing:**
-- Free: 10 papers/day, basic analysis
-- Pro ($29/mo): Unlimited, code gen, trends
-- Team ($149/mo): Collaboration, API access
-
-**Success Metrics:**
-- 1,000 signups in week 1
-- 5% conversion to paid
-- $5K MRR by end of week 2
-
----
-
-#### Week 9: Reproduction Tracking & Validation
-**Goal:** Community validates "what actually works"
-
-**Features:**
-- [ ] "I tried this" tracking
-- [ ] Success/failure ratings
-- [ ] Reproduction notes
-- [ ] Confidence scores
-- [ ] Community discussions
-
-**UI:**
-```
-📊 Reproduction Tracking
-Paper: "DPO beats PPO for RLHF"
-
-Community Attempts: 12
-✅ Worked as claimed: 8 (67%)
-⚠️ Partial success: 3 (25%)
-❌ Couldn't reproduce: 1 (8%)
-
-Confidence Score: 7.5/10
-```
-
-**Success Metrics:**
-- 100+ reproduction attempts logged
-- Network effects visible
-- Users cite reproduction data in decisions
-
----
-
-#### Week 10: Production Stories & Insights
-**Goal:** Learn what works in production, not just papers
-
-**Features:**
-- [ ] Production deployment stories
-- [ ] Cost/performance tradeoffs
-- [ ] "What we learned" posts
-- [ ] Company case studies
-- [ ] Best practices database
-
-**Success Metrics:**
-- 50+ production stories
-- Engagement on case studies
-- Companies reference in decisions
-
----
-
-### **Phase 4: Scale & Polish** (Weeks 11-12) → Launch Ready
-
-#### Week 11: Testing, Performance, Security
-- [ ] 80% test coverage
-- [ ] <500ms API response time
-- [ ] Security audit
-- [ ] Scalability testing
-- [ ] Error monitoring (Sentry)
-
-#### Week 12: Marketing & Official Launch
-- [ ] Launch on Hacker News
-- [ ] Product Hunt launch
-- [ ] Twitter/LinkedIn campaign
-- [ ] Reach out to AI research community
-- [ ] Press kit for tech blogs
-
-**Success Metrics:**
-- 10,000 signups
-- $50K MRR
-- Featured on HN homepage
-- 5+ press mentions
-
----
-
-## 💰 Financial Projections
-
-### Year 1
-- Q1: Build MVP, launch → $10K MRR
-- Q2: Grow features → $50K MRR
-- Q3: Community effects → $150K MRR
-- Q4: Enterprise push → $300K MRR
-- **Total Year 1 ARR: ~$2M**
-
-### Year 2
-- Scale to 50K users
-- Enterprise contracts
-- API monetization
-- **Target: $10M ARR**
-
-### Year 3
-- 200K users
-- Platform play
-- **Target: $30M+ ARR**
-
----
-
-## 🎯 Success Criteria
-
-**3 Months (Week 12):**
-- ✅ 10,000 users
-- ✅ $50K MRR
-- ✅ Clear product-market fit signals
-- ✅ 70%+ user retention
-
-**6 Months:**
-- ✅ 50,000 users
-- ✅ $200K MRR
-- ✅ Seed funding raised ($2-5M) OR profitable
-- ✅ Network effects visible
-
-**12 Months:**
-- ✅ 200,000 users
-- ✅ $2M ARR
-- ✅ #1 tool for AI implementation
-- ✅ Series A ($10-20M) OR $5M+ profit
-
----
-
-## 🚀 Next Actions (This Week)
-
-1. ✅ Finish code detection backend
-2. [ ] Build code detection frontend UI
-3. [ ] Test with 100 real papers
-4. [ ] Add GitHub token to .env
-5. [ ] Ship v0.2 with code detection
-
----
-
-**Last Updated:** 2025-01-04
-**Current Phase:** Week 1 - Code Detection
-**Next Milestone:** v0.2 Launch (Week 1 end)
+By layering these capabilities on the foundation already in place, AI Paper Digest becomes the go-to companion for discovering where the cutting edge is, understanding how it got there, and building what comes next.***
