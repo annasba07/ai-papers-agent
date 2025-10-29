@@ -14,8 +14,9 @@ Usage:
 import asyncio
 import sys
 import argparse
+import os
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 # Add parent directory to path for imports
 sys.path.insert(0, '/Users/kaizen/Software-Projects/ai-papers-agent/backend')
@@ -102,14 +103,15 @@ async def bootstrap_recent_atlas(
     window_months: int,
     max_per_window: int,
     embeddings: bool,
-    extract_concepts: bool
+    extract_concepts: bool,
+    dump_dir: Optional[str]
 ):
     """Seed the atlas with the last N years of papers."""
     print_header(
         f"Bootstrapping Atlas ({years} years, {window_months}-month windows)"
     )
 
-    service = get_ingestion_service()
+    service = get_ingestion_service(local_dump_dir=dump_dir)
 
     summary = await service.bootstrap_recent_atlas(
         categories=categories,
@@ -120,14 +122,14 @@ async def bootstrap_recent_atlas(
         extract_concepts=extract_concepts
     )
 
-    print_stats(
-        {
-            "categories": ", ".join(summary["categories"]),
-            "windows": summary["total_windows"],
-            "max_per_window": summary["max_per_window"]
-        },
-        "Bootstrap Parameters"
-    )
+    context_stats = {
+        "categories": ", ".join(summary["categories"]),
+        "windows": summary["total_windows"],
+        "max_per_window": summary["max_per_window"]
+    }
+    if summary.get("local_dump_dir"):
+        context_stats["local_dump_dir"] = summary["local_dump_dir"]
+    print_stats(context_stats, "Bootstrap Parameters")
 
     print("\n📦 Category Breakdown")
     print("-" * 50)
@@ -139,6 +141,9 @@ async def bootstrap_recent_atlas(
             f"duplicates={stat['duplicates']}, "
             f"errors={stat['errors']}"
         )
+        if stat.get("dumps"):
+            example = stat["dumps"][-1]
+            print(f"     dumps: {len(stat['dumps'])} files (latest: {example})")
     print("-" * 50 + "\n")
 
 
@@ -293,6 +298,7 @@ Examples:
     parser.add_argument("--years", type=int, default=3, help="Number of years for --bootstrap-atlas (default: 3)")
     parser.add_argument("--window-months", type=int, default=3, help="Months per window for --bootstrap-atlas (default: 3)")
     parser.add_argument("--max-window", type=int, default=200, help="Max papers per window for --bootstrap-atlas (default: 200)")
+    parser.add_argument("--dump-dir", help="Write raw paper dumps to this directory (local bootstrap mode)")
 
     # Processing flags
     parser.add_argument("--no-embeddings", action="store_true", help="Skip embedding generation")
@@ -308,8 +314,11 @@ Examples:
 
     args = parser.parse_args()
 
-    # Connect to database
-    await database.connect()
+    dump_mode_enabled = bool(args.dump_dir or os.getenv("LOCAL_DUMP_DIR"))
+    db_connected = False
+    if not (args.bootstrap_atlas and dump_mode_enabled):
+        await database.connect()
+        db_connected = True
 
     try:
         # Determine mode
@@ -349,7 +358,8 @@ Examples:
                 window_months=args.window_months,
                 max_per_window=args.max_window,
                 embeddings=not args.no_embeddings,
-                extract_concepts=args.extract_concepts
+                extract_concepts=args.extract_concepts,
+                dump_dir=args.dump_dir
             )
 
         elif args.category:
@@ -382,7 +392,8 @@ Examples:
         traceback.print_exc()
         sys.exit(1)
     finally:
-        await database.disconnect()
+        if db_connected:
+            await database.disconnect()
 
 
 if __name__ == "__main__":
