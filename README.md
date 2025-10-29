@@ -21,6 +21,7 @@ The platform is being built around four complementary pillars:
 - **💻 Code Detection** – Identify official and community implementations, ranked by a quality heuristic.
 - **📊 Insightful Badges** – Impact, difficulty, reading time, significance, and practicality at a glance.
 - **⚡ Async Processing Stack** – FastAPI + background tasks deliver concurrent analysis and caching with Redis or in-memory fallback.
+- **🗂️ Local Atlas Bootstrap** – Seed the research atlas by downloading the last N years of arXiv papers to NDJSON files (`--dump-dir`) and build derived JSON datasets for the prototype UI (`python -m app.cli.build_atlas_dataset`).
 
 ## Tech Stack
 

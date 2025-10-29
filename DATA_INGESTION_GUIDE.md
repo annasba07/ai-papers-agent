@@ -119,6 +119,23 @@ When you're ready to replay the dump:
 2. Write a simple loader to stream each NDJSON file into the `papers` table (or use `psql \copy`).
 3. Kick off embeddings/concept extraction as needed.
 
+### Build Derived Datasets for the Atlas Prototype
+
+Once you have local dumps, convert them into lightweight datasets for the UI:
+
+```bash
+cd backend
+../venv-py311/bin/python -m app.cli.build_atlas_dataset \
+  --input ../data/atlas_bootstrap \
+  --output ../data/derived
+```
+
+Outputs:
+- `papers_catalog.ndjson` – combined, de-duplicated paper list (newest first)
+- `category_timeline.json` – monthly counts per category for trend charts
+- `author_leaderboard.json` – top authors by appearance frequency
+- `window_summary.json` / `build_stats.json` – provenance metadata for debugging
+
 #### **Ingest Specific Paper**
 
 ```bash
