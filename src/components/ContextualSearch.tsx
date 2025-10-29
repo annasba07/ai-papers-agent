@@ -18,6 +18,7 @@ const ContextualSearch = () => {
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const searchSteps = [
     'Analyzing your project description...',
@@ -32,6 +33,7 @@ const ContextualSearch = () => {
     setResults(null); // Clear previous results
     setCurrentStep(0);
     setIsComplete(false);
+    setError(null);
     
     try {
       // Simulate progressive steps for better UX
@@ -67,7 +69,9 @@ const ContextualSearch = () => {
       
     } catch (error) {
       console.error("Failed to fetch contextual search results:", error);
-      // Optionally, set an error state here to show in the UI
+      setError(
+        "Contextual analysis is currently unavailable. Start the backend API (`uvicorn app.main:app --reload`) or set NEXT_PUBLIC_API_BASE_URL to a running instance."
+      );
     } finally {
       setLoading(false);
     }
@@ -79,6 +83,18 @@ const ContextualSearch = () => {
       <p style={{ color: 'var(--secondary-text)', marginBottom: '16px' }}>
         Describe what you&apos;re building. The AI will find relevant papers and suggest cutting-edge techniques.
       </p>
+      {error && (
+        <div style={{
+          marginBottom: '16px',
+          padding: '16px',
+          borderRadius: '12px',
+          border: '1px solid rgba(239, 68, 68, 0.35)',
+          background: 'rgba(239, 68, 68, 0.08)',
+          color: '#fecaca'
+        }}>
+          {error}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <textarea
           value={description}

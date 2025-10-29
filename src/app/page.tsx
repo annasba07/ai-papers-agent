@@ -11,6 +11,7 @@ export default function Home() {
   const [filterDays] = useState('7');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const apiBaseUrl = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000', []);
 
@@ -18,6 +19,7 @@ export default function Home() {
     const fetchPapers = async () => {
       setLoading(true);
       try {
+        setApiError(null);
         const params = new URLSearchParams({
           days: filterDays,
           category: filterCategory,
@@ -32,6 +34,9 @@ export default function Home() {
       } catch (error) {
         console.error("Failed to fetch papers:", error);
         setPapers([]);
+        setApiError(
+          'Unable to reach the research API. Start the backend server (`uvicorn app.main:app --reload`) or set NEXT_PUBLIC_API_BASE_URL to a running instance.'
+        );
       } finally {
         setLoading(false);
       }
@@ -106,6 +111,18 @@ export default function Home() {
 
       <section>
         <h2>Discover Papers</h2>
+        {apiError && (
+          <div style={{
+            marginBottom: '20px',
+            padding: '16px',
+            borderRadius: '12px',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            background: 'rgba(239, 68, 68, 0.08)',
+            color: '#fecaca'
+          }}>
+            {apiError}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
           <input
             type="text"
