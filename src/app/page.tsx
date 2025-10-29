@@ -3,7 +3,7 @@ import ContextualSearch from '@/components/ContextualSearch';
 import PaperList from '@/components/PaperList';
 import AtlasOverview from '@/components/AtlasOverview';
 import { Paper } from '@/types/Paper';
-import type { AtlasPaper } from '@/types/Atlas';
+import type { AtlasPaper, AtlasSummary } from '@/types/Atlas';
 import { useState, useEffect, useMemo } from 'react';
 
 const mapAtlasPaperToPaper = (paper: AtlasPaper): Paper => {
@@ -49,6 +49,12 @@ export default function Home() {
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
+  const [atlasSummary, setAtlasSummary] = useState<AtlasSummary | null>(null);
+  const [atlasSummaryLoading, setAtlasSummaryLoading] = useState<boolean>(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [atlasHighlights, setAtlasHighlights] = useState<AtlasPaper[]>([]);
+  const [atlasHighlightsLoading, setAtlasHighlightsLoading] = useState<boolean>(true);
+  const [highlightsError, setHighlightsError] = useState<string | null>(null);
 
   const apiBaseUrl = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? '', []);
 
@@ -103,6 +109,115 @@ export default function Home() {
     };
   }, [filterDays, filterCategory, searchQuery, apiBaseUrl]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSummary = async () => {
+      setAtlasSummaryLoading(true);
+      setSummaryError(null);
+      try {
+        const response = await fetch('/api/atlas/summary');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = (await response.json()) as AtlasSummary;
+        if (isMounted) {
+          setAtlasSummary(data);
+        }
+      } catch (error) {
+        console.error('Failed to load atlas summary:', error);
+        if (isMounted) {
+          setSummaryError('Failed to load atlas summary');
+          setAtlasSummary(null);
+        }
+      } finally {
+        if (isMounted) {
+          setAtlasSummaryLoading(false);
+        }
+      }
+    };
+
+    const fetchHighlights = async () => {
+      setAtlasHighlightsLoading(true);
+      setHighlightsError(null);
+      try {
+        const response = await fetch('/api/atlas/papers?limit=8');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = (await response.json()) as { papers: AtlasPaper[] };
+        if (isMounted) {
+          setAtlasHighlights(data.papers);
+        }
+      } catch (error) {
+        console.error('Failed to load atlas highlight papers:', error);
+        if (isMounted) {
+          setHighlightsError('Failed to load atlas highlight papers');
+          setAtlasHighlights([]);
+        }
+      } finally {
+        if (isMounted) {
+          setAtlasHighlightsLoading(false);
+        }
+      }
+    };
+
+    fetchSummary();
+    fetchHighlights();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const atlasError = summaryError ?? highlightsError;
+
+  const latestHighlightDate = useMemo(() => {
+    let latest: Date | null = null;
+    atlasHighlights.forEach((paper) => {
+      if (!paper.published) {
+        return;
+      }
+      const candidate = new Date(paper.published);
+      if (Number.isNaN(candidate.getTime())) {
+        return;
+      }
+      if (!latest || candidate > latest) {
+        latest = candidate;
+      }
+    });
+    return latest;
+  }, [atlasHighlights]);
+
+  const latestHighlightLag = useMemo(() => {
+    if (!latestHighlightDate) {
+      return '—';
+    }
+    const diffMs = Date.now() - latestHighlightDate.getTime();
+    if (diffMs <= 0) {
+      return '<1h';
+    }
+    const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+    if (diffHours >= 72) {
+      const diffDays = Math.max(1, Math.round(diffHours / 24));
+      return `${diffDays}d`;
+    }
+    return `${Math.max(1, diffHours)}h`;
+  }, [latestHighlightDate]);
+
+  const heroSparklineCopy = useMemo(() => {
+    if (!atlasSummary) {
+      return 'A living atlas that learns from every new release—highlighting velocity, breakthroughs, and the builders behind them.';
+    }
+    const categories = atlasSummary.stats.categories.length;
+    const paperCount = atlasSummary.stats.unique_papers.toLocaleString();
+    const freshness =
+      latestHighlightLag === '—'
+        ? 'staying current as new work lands.'
+        : `refreshing within ${latestHighlightLag} of new releases.`;
+    return `Tracking ${paperCount} papers across ${categories} active areas, ${freshness}`;
+  }, [atlasSummary, latestHighlightLag]);
+
   return (
     <main className="page-shell">
       <section className="hero">
@@ -126,22 +241,23 @@ export default function Home() {
           <span className="hero__meta-title">Inside the atlas</span>
           <ul className="hero__fact-list">
             <li className="hero__fact">
-              <span className="hero__fact-value">6.6k</span>
+              <span className="hero__fact-value">
+                {atlasSummary ? atlasSummary.stats.unique_papers.toLocaleString() : '—'}
+              </span>
               <span className="hero__fact-label">Indexed papers</span>
             </li>
             <li className="hero__fact">
-              <span className="hero__fact-value">120+</span>
+              <span className="hero__fact-value">
+                {atlasSummary ? atlasSummary.stats.categories.length : '—'}
+              </span>
               <span className="hero__fact-label">Active research areas</span>
             </li>
             <li className="hero__fact">
-              <span className="hero__fact-value">48h</span>
-              <span className="hero__fact-label">Average ingestion lag</span>
+              <span className="hero__fact-value">{latestHighlightLag}</span>
+              <span className="hero__fact-label">Last highlight added</span>
             </li>
           </ul>
-          <p className="hero__sparkline">
-            A living atlas that learns from every new release—highlighting velocity, breakthroughs, and the builders behind
-            them.
-          </p>
+          <p className="hero__sparkline">{heroSparklineCopy}</p>
         </aside>
       </section>
 
@@ -176,7 +292,13 @@ export default function Home() {
         <ContextualSearch />
       </section>
 
-      <AtlasOverview paperLimit={8} />
+      <AtlasOverview
+        summary={atlasSummary}
+        papers={atlasHighlights}
+        loadingSummary={atlasSummaryLoading}
+        loadingPapers={atlasHighlightsLoading}
+        error={atlasError}
+      />
 
       <section className="paper-discovery" aria-labelledby="discover-heading">
         <header>
