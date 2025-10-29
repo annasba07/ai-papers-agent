@@ -12,7 +12,7 @@ interface SearchResult {
 }
 
 const ContextualSearch = () => {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   const [description, setDescription] = useState('');
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +29,10 @@ const ContextualSearch = () => {
 
   const handleSearch = async () => {
     if (!description) return;
+    if (!API_BASE_URL) {
+      setError('Configure NEXT_PUBLIC_API_BASE_URL to use contextual analysis or start the FastAPI backend.');
+      return;
+    }
     setLoading(true);
     setResults(null); // Clear previous results
     setCurrentStep(0);
@@ -103,10 +107,16 @@ const ContextualSearch = () => {
           rows={5}
           className="form-control"
         />
-        <button onClick={handleSearch} disabled={loading} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
+        <button onClick={handleSearch} disabled={loading || !API_BASE_URL} className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
           {loading ? 'Analyzing...' : 'Analyze Project'}
         </button>
       </div>
+
+      {!API_BASE_URL && (
+        <p style={{ marginTop: '12px', fontSize: '13px', color: 'var(--secondary-text)' }}>
+          Tip: run <code>uvicorn app.main:app --reload</code> in <code>backend/</code> and set <code>NEXT_PUBLIC_API_BASE_URL</code> to that URL to enable contextual insights.
+        </p>
+      )}
 
       {loading && (
         <div style={{ marginTop: '24px' }}>

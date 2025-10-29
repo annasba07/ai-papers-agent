@@ -3,7 +3,44 @@ import ContextualSearch from '@/components/ContextualSearch';
 import PaperList from '@/components/PaperList';
 import AtlasOverview from '@/components/AtlasOverview';
 import { Paper } from '@/types/Paper';
+import type { AtlasPaper } from '@/types/Atlas';
 import { useState, useEffect, useMemo } from 'react';
+
+const mapAtlasPaperToPaper = (paper: AtlasPaper): Paper => {
+  const abstract = paper.abstract ?? '';
+  const wordCount = abstract ? abstract.split(/\s+/).filter(Boolean).length : 0;
+  const readingTime = Math.max(4, Math.round((wordCount / 200) * 5));
+  const plainId = paper.id?.split('v')[0] ?? paper.id;
+
+  return {
+    id: paper.id,
+    title: paper.title ?? 'Untitled Paper',
+    authors: paper.authors ?? [],
+    published: paper.published ?? '',
+    summary: abstract,
+    link: paper.link ?? (plainId ? `https://arxiv.org/abs/${plainId}` : '#'),
+    aiSummary: {
+      summary: abstract || 'Summary not available yet.',
+      keyContribution: 'Detailed AI analysis not generated yet.',
+      novelty: 'Awaiting AI analysis.',
+      technicalInnovation: 'Awaiting AI analysis.',
+      methodologyBreakdown: 'Awaiting AI analysis.',
+      performanceHighlights: 'Awaiting AI analysis.',
+      implementationInsights: 'Awaiting AI analysis.',
+      researchContext: 'Awaiting AI analysis.',
+      futureImplications: 'Awaiting AI analysis.',
+      limitations: 'Awaiting AI analysis.',
+      impactScore: 5,
+      difficultyLevel: 'intermediate',
+      readingTime,
+      hasCode: false,
+      implementationComplexity: 'medium',
+      practicalApplicability: 'medium',
+      researchSignificance: 'incremental',
+      reproductionDifficulty: 'medium',
+    },
+  };
+};
 
 export default function Home() {
   const [papers, setPapers] = useState<Paper[]>([]);
@@ -13,7 +50,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const apiBaseUrl = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000', []);
+  const apiBaseUrl = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? '', []);
 
   useEffect(() => {
     const fetchPapers = async () => {
@@ -25,18 +62,33 @@ export default function Home() {
           category: filterCategory,
           query: searchQuery,
         });
-        const response = await fetch(`${apiBaseUrl}/papers?${params.toString()}`);
+        const endpoint = apiBaseUrl
+          ? `${apiBaseUrl}/papers?${params.toString()}`
+          : `/api/atlas/papers?${params.toString()}`;
+
+        const response = await fetch(endpoint);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data: Paper[] = await response.json();
-        setPapers(data);
+        const data = await response.json();
+
+        if (Array.isArray(data)) {
+          setPapers(data as Paper[]);
+        } else if (Array.isArray(data.papers)) {
+          setPapers((data.papers as AtlasPaper[]).map(mapAtlasPaperToPaper));
+        } else {
+          setPapers([]);
+        }
       } catch (error) {
         console.error("Failed to fetch papers:", error);
         setPapers([]);
-        setApiError(
-          'Unable to reach the research API. Start the backend server (`uvicorn app.main:app --reload`) or set NEXT_PUBLIC_API_BASE_URL to a running instance.'
-        );
+        if (apiBaseUrl) {
+          setApiError(
+            'Unable to reach the research API. Start the backend server (`uvicorn app.main:app --reload`) or update NEXT_PUBLIC_API_BASE_URL.'
+          );
+        } else {
+          setApiError('Failed to load atlas dataset. Ensure derived files exist in `data/derived`.');
+        }
       } finally {
         setLoading(false);
       }
