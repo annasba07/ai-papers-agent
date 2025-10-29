@@ -1,51 +1,29 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import type { AtlasSummary, AtlasPaper } from "@/types/Atlas";
 
-interface AtlasOverviewProps {
-  paperLimit?: number;
-}
+type AtlasOverviewProps = {
+  summary: AtlasSummary | null;
+  papers: AtlasPaper[];
+  loadingSummary?: boolean;
+  loadingPapers?: boolean;
+  error?: string | null;
+};
 
-export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) => {
-  const [summary, setSummary] = useState<AtlasSummary | null>(null);
-  const [papers, setPapers] = useState<AtlasPaper[]>([]);
-  const [error, setError] = useState<string | null>(null);
+const pillVariants = ["indigo", "emerald", "amber", "pink", "sky", "slate"] as const;
 
-  const pillVariants = ["indigo", "emerald", "amber", "pink", "sky", "slate"];
-
-  useEffect(() => {
-    const fetchSummary = async () => {
-      try {
-        const res = await fetch("/api/atlas/summary");
-        if (!res.ok) {
-          throw new Error(await res.text());
-        }
-        const json = (await res.json()) as AtlasSummary;
-        setSummary(json);
-      } catch (err) {
-        setError("Failed to load atlas summary");
-        console.error(err);
-      }
-    };
-
-    const fetchPapers = async () => {
-      try {
-        const res = await fetch(`/api/atlas/papers?limit=${paperLimit}`);
-        if (!res.ok) {
-          throw new Error(await res.text());
-        }
-        const json = (await res.json()) as { papers: AtlasPaper[] };
-        setPapers(json.papers);
-      } catch (err) {
-        setError("Failed to load atlas papers");
-        console.error(err);
-      }
-    };
-
-    fetchSummary();
-    fetchPapers();
-  }, [paperLimit]);
+const AtlasOverview = ({
+  summary,
+  papers,
+  loadingSummary = false,
+  loadingPapers = false,
+  error = null,
+}: AtlasOverviewProps) => {
+  const totalPapers = summary?.stats.unique_papers ?? 0;
+  const showSummaryPlaceholder = loadingSummary && !summary && !error;
+  const summaryUnavailable = !loadingSummary && !summary && !error;
+  const pillDenominator = totalPapers > 0 ? totalPapers : 1;
 
   return (
     <section className="atlas-overview">
@@ -58,10 +36,10 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
       </header>
 
       {error && <div className="alert alert--error">{error}</div>}
+      {showSummaryPlaceholder && <p className="atlas-empty">Loading atlas data…</p>}
+      {summaryUnavailable && <p className="atlas-empty">Atlas summary unavailable right now.</p>}
 
-      {!error && !summary && <p className="atlas-empty">Loading atlas data…</p>}
-
-      {!error && summary && (
+      {summary && (
         <div className="atlas-overview__grid">
           <div className="atlas-statboard">
             <StatTile
@@ -86,8 +64,9 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
             <p className="section-subtitle">Where publication velocity is peaking across the last three years.</p>
             <div className="atlas-pillboard">
               {summary.topCategories.slice(0, 8).map((cat, index) => {
-                const share = Math.max(0, Math.min(1, cat.total / summary.stats.unique_papers));
+                const share = Math.max(0, Math.min(1, cat.total / pillDenominator));
                 const variant = pillVariants[index % pillVariants.length];
+
                 return (
                   <div
                     key={cat.category}
@@ -119,10 +98,10 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
 
           <div className="atlas-field atlas-highlights">
             <h3 className="section-title">Recent Highlights</h3>
-            <p className="section-subtitle">Signal-rich releases from the last {paperLimit} atlas entries.</p>
-            {!papers.length ? (
+            <p className="section-subtitle">Signal-rich releases from the latest atlas entries.</p>
+            {loadingPapers ? (
               <p className="atlas-empty">Loading highlight papers…</p>
-            ) : (
+            ) : papers.length ? (
               <div className="highlight-grid">
                 {papers.map((paper, index) => {
                   const variant = pillVariants[index % pillVariants.length];
@@ -147,6 +126,8 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
                   );
                 })}
               </div>
+            ) : (
+              <p className="atlas-empty">No highlight papers available yet.</p>
             )}
           </div>
         </div>
