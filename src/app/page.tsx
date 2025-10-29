@@ -104,87 +104,108 @@ export default function Home() {
   }, [filterDays, filterCategory, searchQuery, apiBaseUrl]);
 
   return (
-    <main className="container" style={{ paddingTop: '64px', paddingBottom: '64px' }}>
-      <header style={{ textAlign: 'center', margin: '0 0 56px 0' }}>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          padding: '8px 16px',
-          borderRadius: '999px',
-          background: 'rgba(99, 102, 241, 0.12)',
-          color: 'var(--accent-indigo)',
-          fontWeight: 600,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          marginBottom: '18px'
-        }}>
-          Living Research Atlas
-        </span>
-        <h1 style={{ fontSize: '42px', fontWeight: 700, marginBottom: '16px', color: '#f8fafc' }}>
-          See where AI research is moving—and act on it fast.
-        </h1>
-        <p style={{ fontSize: '20px', color: 'var(--secondary-text)', maxWidth: '760px', margin: '0 auto 32px' }}>
-          Discover breakout areas, analyse the leading papers, and bootstrap implementation plans with a single toolkit designed for research teams.
-        </p>
-        <div style={{ display: 'inline-flex', gap: '14px' }}>
-          <a href="#roadmap" className="btn btn-primary">Explore Atlas</a>
-          <a href="#contextual-search" className="btn btn-secondary">Ask the Assistant</a>
-        </div>
-      </header>
-
-      <section id="roadmap" style={{ display: 'grid', gap: '24px', marginBottom: '48px' }}>
-        <div className="card" style={{ display: 'grid', gap: '16px' }}>
-          <h2 style={{ marginBottom: '8px' }}>Your Research Playbook</h2>
-          <div style={{ display: 'grid', gap: '18px', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <StepCard
-              step="1"
-              title="Explore the landscape"
-              description="Track where research velocity is accelerating across categories, benchmarks, and authors."
-            />
-            <StepCard
-              step="2"
-              title="Find the right papers"
-              description="Drill into the topics with the most momentum. Inspect abstracts, code links, or trends in a click."
-            />
-            <StepCard
-              step="3"
-              title="Activate code generation"
-              description="Select a key paper and hand off to the multi-agent builder to create specs, tests, and runnable projects."
-            />
+    <main className="page-shell">
+      <section className="hero">
+        <div className="hero__content">
+          <span className="hero__chip">Living Research Atlas</span>
+          <h1>See where AI research is moving—and act on it fast.</h1>
+          <p className="hero__subtitle">
+            Discover breakout areas, analyse the leading papers, and bootstrap implementation plans with a toolkit
+            purpose-built for research teams that need traction today.
+          </p>
+          <div className="hero__actions">
+            <a href="#roadmap" className="btn btn-primary">
+              Explore Atlas
+            </a>
+            <a href="#contextual-search" className="btn btn-secondary">
+              Ask the Assistant
+            </a>
           </div>
+        </div>
+        <aside className="hero__meta">
+          <span className="hero__meta-title">Inside the atlas</span>
+          <ul className="hero__fact-list">
+            <li className="hero__fact">
+              <span className="hero__fact-value">6.6k</span>
+              <span className="hero__fact-label">Indexed papers</span>
+            </li>
+            <li className="hero__fact">
+              <span className="hero__fact-value">120+</span>
+              <span className="hero__fact-label">Active research areas</span>
+            </li>
+            <li className="hero__fact">
+              <span className="hero__fact-value">48h</span>
+              <span className="hero__fact-label">Average ingestion lag</span>
+            </li>
+          </ul>
+          <p className="hero__sparkline">
+            A living atlas that learns from every new release—highlighting velocity, breakthroughs, and the builders behind
+            them.
+          </p>
+        </aside>
+      </section>
+
+      <section id="roadmap" className="step-track-section">
+        <div className="step-track-section__header">
+          <span className="eyebrow">Research playbook</span>
+          <h2>Your Research Playbook</h2>
+          <p className="section-subtitle">
+            Follow the momentum from scouting breakthrough ideas to spinning up agents that can prototype the work.
+          </p>
+        </div>
+        <div className="step-track">
+          <StepCard
+            step="01"
+            title="Explore the landscape"
+            description="Track where research velocity is accelerating across categories, benchmarks, and authors."
+          />
+          <StepCard
+            step="02"
+            title="Find the right papers"
+            description="Drill into the topics with the most momentum. Inspect abstracts, code links, or trends in a click."
+          />
+          <StepCard
+            step="03"
+            title="Activate code generation"
+            description="Select a key paper and hand off to the multi-agent builder to create specs, tests, and runnable projects."
+          />
         </div>
       </section>
 
-      <div id="contextual-search" className="card" style={{ marginBottom: '32px' }}>
+      <section id="contextual-search" className="contextual-shell">
         <ContextualSearch />
-      </div>
+      </section>
 
       <AtlasOverview paperLimit={8} />
 
-      <section>
-        <h2>Discover Papers</h2>
-        {apiError && (
-          <div style={{
-            marginBottom: '20px',
-            padding: '16px',
-            borderRadius: '12px',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            background: 'rgba(239, 68, 68, 0.08)',
-            color: '#fecaca'
-          }}>
-            {apiError}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '32px' }}>
+      <section className="paper-discovery" aria-labelledby="discover-heading">
+        <header>
+          <span className="eyebrow">Atlas feed</span>
+          <h2 id="discover-heading" className="section-title">
+            Discover Papers
+          </h2>
+          <p className="section-subtitle">
+            Tune the filters to surface the freshest research signals from the last {filterDays} days.
+          </p>
+        </header>
+
+        {apiError && <div className="alert alert--error">{apiError}</div>}
+
+        <div className="paper-discovery__controls">
           <input
             type="text"
-            placeholder="Filter by keywords..."
+            placeholder="Filter by keywords…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="form-control"
-            style={{ flexGrow: 1 }}
+            aria-label="Filter papers by keyword"
           />
-          <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="form-control">
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="form-control"
+            aria-label="Filter papers by category"
+          >
             <option value="all">All Categories</option>
             <option value="cs.AI">Artificial Intelligence</option>
             <option value="cs.LG">Machine Learning</option>
@@ -194,39 +215,27 @@ export default function Home() {
         </div>
 
         {loading ? (
-          <p style={{ textAlign: 'center' }}>Loading papers...</p>
+          <p className="atlas-empty">Loading papers…</p>
         ) : papers.length > 0 ? (
           <PaperList papers={papers} />
         ) : (
-          <p style={{ textAlign: 'center' }}>No papers found for the selected criteria.</p>
+          <p className="atlas-empty">No papers found for the selected criteria.</p>
         )}
       </section>
     </main>
   );
 }
 
-const StepCard = ({ step, title, description }: { step: string; title: string; description: string }) => (
-  <div style={{
-    padding: '18px',
-    borderRadius: '16px',
-    background: 'rgba(17, 24, 39, 0.55)',
-    border: '1px solid rgba(148, 163, 184, 0.15)'
-  }}>
-    <div style={{
-      width: '36px',
-      height: '36px',
-      borderRadius: '999px',
-      background: 'rgba(99, 102, 241, 0.2)',
-      color: 'var(--accent-indigo)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontWeight: 600,
-      marginBottom: '12px'
-    }}>
-      {step}
-    </div>
-    <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>{title}</h3>
-    <p style={{ color: 'var(--secondary-text)', fontSize: '14px', lineHeight: 1.6 }}>{description}</p>
-  </div>
+type StepCardProps = {
+  step: string;
+  title: string;
+  description: string;
+};
+
+const StepCard = ({ step, title, description }: StepCardProps) => (
+  <article className="step-card">
+    <span className="step-card__step">{step}</span>
+    <h3 className="step-card__title">{title}</h3>
+    <p className="step-card__copy">{description}</p>
+  </article>
 );

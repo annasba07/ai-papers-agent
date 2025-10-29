@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { AtlasSummary, AtlasPaper } from "@/types/Atlas";
 
 interface AtlasOverviewProps {
@@ -11,6 +11,8 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
   const [summary, setSummary] = useState<AtlasSummary | null>(null);
   const [papers, setPapers] = useState<AtlasPaper[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const pillVariants = ["indigo", "emerald", "amber", "pink", "sky", "slate"];
 
   useEffect(() => {
     const fetchSummary = async () => {
@@ -45,107 +47,127 @@ export const AtlasOverview: React.FC<AtlasOverviewProps> = ({ paperLimit = 8 }) 
     fetchPapers();
   }, [paperLimit]);
 
-  if (error) {
-    return (
-      <div className="card" style={{ marginBottom: "32px" }}>
-        <h2>Atlas Snapshot</h2>
-        <p>{error}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="card" style={{ marginBottom: "32px" }}>
-      <h2>Living Research Atlas Snapshot</h2>
-      {!summary ? (
-        <p>Loading atlas data…</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" }}>
-            <StatBlock label="Papers" value={summary.stats.unique_papers.toLocaleString()} />
-            <StatBlock label="Input Windows" value={summary.stats.input_files} />
-            <StatBlock label="Active Categories" value={summary.stats.categories.length} />
+    <section className="atlas-overview">
+      <header className="atlas-overview__header">
+        <span className="eyebrow">Atlas snapshot</span>
+        <h2>Living Research Atlas Snapshot</h2>
+        <p className="section-subtitle">
+          A live view of where research momentum is building so you can target the teams, categories, and papers that matter.
+        </p>
+      </header>
+
+      {error && <div className="alert alert--error">{error}</div>}
+
+      {!error && !summary && <p className="atlas-empty">Loading atlas data…</p>}
+
+      {!error && summary && (
+        <div className="atlas-overview__grid">
+          <div className="atlas-statboard">
+            <StatTile
+              label="Indexed papers"
+              value={summary.stats.unique_papers.toLocaleString()}
+              hint="Aggregated from arXiv & partner feeds"
+            />
+            <StatTile
+              label="Context windows processed"
+              value={summary.stats.input_files.toLocaleString()}
+              hint="Documents ingested for contextual grounding"
+            />
+            <StatTile
+              label="Active research areas"
+              value={summary.stats.categories.length}
+              hint="Categories with activity in the last 90 days"
+            />
           </div>
 
-          <div>
-            <h3 style={{ marginBottom: "12px" }}>Top Research Areas (last 3 years)</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
-              {summary.topCategories.slice(0, 8).map((cat) => (
-                <span
-                  key={cat.category}
-                  className="badge"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    padding: "8px 14px",
-                    borderRadius: "999px",
-                    backgroundColor: "rgba(59, 130, 246, 0.12)",
-                    color: "var(--accent-blue)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {cat.category}
-                  <span style={{ fontSize: "12px", color: "var(--secondary-text)" }}>
-                    {cat.total.toLocaleString()} papers
-                  </span>
-                </span>
-              ))}
+          <div className="atlas-field">
+            <h3 className="section-title">Top Research Areas</h3>
+            <p className="section-subtitle">Where publication velocity is peaking across the last three years.</p>
+            <div className="atlas-pillboard">
+              {summary.topCategories.slice(0, 8).map((cat, index) => {
+                const share = Math.max(0, Math.min(1, cat.total / summary.stats.unique_papers));
+                const variant = pillVariants[index % pillVariants.length];
+                return (
+                  <div
+                    key={cat.category}
+                    className={`atlas-pill atlas-pill--${variant}`}
+                    style={{ "--pill-share": `${Math.round(share * 100)}%` } as CSSProperties}
+                  >
+                    <div className="atlas-pill__name">{cat.category}</div>
+                    <div className="atlas-pill__value">{cat.total.toLocaleString()} papers</div>
+                    <span className="atlas-pill__bar" />
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div>
-            <h3 style={{ marginBottom: "12px" }}>Most Prolific Authors</h3>
-            <ol style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "8px", paddingLeft: "18px" }}>
-              {summary.topAuthors.slice(0, 12).map((author) => (
-                <li key={author.author} style={{ color: "var(--secondary-text)" }}>
-                  <strong style={{ color: "var(--primary-text)" }}>{author.author}</strong>
-                  <span style={{ marginLeft: "6px", fontSize: "12px" }}>({author.paper_count})</span>
+          <div className="atlas-field">
+            <h3 className="section-title">Most Prolific Authors</h3>
+            <p className="section-subtitle">Researchers pushing the frontier with the highest output.</p>
+            <ol className="atlas-author-list">
+              {summary.topAuthors.slice(0, 10).map((author, index) => (
+                <li key={author.author}>
+                  <span className="atlas-author-rank">#{index + 1}</span>
+                  <span className="atlas-author-name">{author.author}</span>
+                  <span className="atlas-author-count">{author.paper_count} papers</span>
                 </li>
               ))}
             </ol>
           </div>
 
-          <div>
-            <h3 style={{ marginBottom: "12px" }}>Recent Highlights</h3>
+          <div className="atlas-field atlas-highlights">
+            <h3 className="section-title">Recent Highlights</h3>
+            <p className="section-subtitle">Signal-rich releases from the last {paperLimit} atlas entries.</p>
             {!papers.length ? (
-              <p>Loading papers…</p>
+              <p className="atlas-empty">Loading highlight papers…</p>
             ) : (
-              <div style={{ display: "grid", gap: "16px" }}>
-                {papers.map((paper) => (
-                  <article key={paper.id} className="paper-card" style={{ padding: "16px", borderRadius: "12px", backgroundColor: "var(--component-bg-light)", border: "1px solid var(--borders)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-                      <h4 style={{ margin: 0, fontSize: "18px" }}>{paper.title}</h4>
-                      <span style={{ fontSize: "12px", color: "var(--secondary-text)" }}>{paper.category}</span>
-                    </div>
-                    <p style={{ fontSize: "13px", color: "var(--secondary-text)", marginBottom: "8px" }}>
-                      {paper.authors.slice(0, 4).join(", ")}
-                      {paper.authors.length > 4 ? " et al." : ""}
-                      {paper.published ? ` • ${new Date(paper.published).toLocaleDateString()}` : ""}
-                    </p>
-                    <p style={{ fontSize: "14px", color: "var(--primary-text)", lineHeight: 1.5 }}>
-                      {paper.abstract.slice(0, 260)}{paper.abstract.length > 260 ? "…" : ""}
-                    </p>
-                    {paper.link && (
-                      <a href={paper.link} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ marginTop: "8px" }}>
-                        View on arXiv
-                      </a>
-                    )}
-                  </article>
-                ))}
+              <div className="highlight-grid">
+                {papers.map((paper, index) => {
+                  const variant = pillVariants[index % pillVariants.length];
+                  return (
+                    <article key={paper.id} className={`highlight-card highlight-card--${variant}`}>
+                      <span className="highlight-card__category">{paper.category ?? "Uncategorised"}</span>
+                      <h4 className="highlight-card__title">{paper.title}</h4>
+                      <p className="highlight-card__meta">
+                        {paper.authors.slice(0, 3).join(", ")}
+                        {paper.authors.length > 3 ? " et al." : ""}
+                        {paper.published ? ` • ${new Date(paper.published).toLocaleDateString()}` : ""}
+                      </p>
+                      <p className="highlight-card__excerpt">
+                        {paper.abstract.length > 240 ? `${paper.abstract.slice(0, 240)}…` : paper.abstract}
+                      </p>
+                      {paper.link && (
+                        <a href={paper.link} target="_blank" rel="noopener noreferrer" className="highlight-card__cta">
+                          View paper →
+                        </a>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 };
 
-const StatBlock = ({ label, value }: { label: string; value: string | number }) => (
-  <div style={{ padding: "16px", borderRadius: "12px", backgroundColor: "rgba(17, 25, 40, 0.04)" }}>
-    <div style={{ fontSize: "14px", color: "var(--secondary-text)", marginBottom: "6px" }}>{label}</div>
-    <div style={{ fontSize: "26px", fontWeight: 700 }}>{value}</div>
+const StatTile = ({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+}) => (
+  <div className="atlas-statboard__tile">
+    <span className="atlas-statboard__label">{label}</span>
+    <span className="atlas-statboard__value">{value}</span>
+    <span className="atlas-statboard__hint">{hint}</span>
   </div>
 );
 
