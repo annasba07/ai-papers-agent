@@ -125,7 +125,7 @@ class Dataset(Base):
     maintainer = Column(String(200), nullable=True)
     url = Column(String(300), nullable=True)
     embedding = Column(Vector(1536), nullable=True)
-    metadata = Column(JSONB, nullable=True)
+    extra_metadata = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

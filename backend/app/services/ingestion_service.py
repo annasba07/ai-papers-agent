@@ -35,7 +35,14 @@ class IngestionService(LoggerMixin):
         github_provider: GitHubRepoProvider | None = None
     ):
         self.arxiv_service = arxiv_service
-        self.embedding_service = get_embedding_service()
+        try:
+            self.embedding_service = get_embedding_service()
+        except ValueError as exc:
+            self.log_warning(
+                "Embedding service unavailable; embeddings will be skipped",
+                error=str(exc)
+            )
+            self.embedding_service = None
         self.research_graph_service = get_research_graph_service()
         self.openalex_provider = openalex_provider or OpenAlexProvider()
         self.pwc_provider = pwc_provider or PapersWithCodeProvider()
@@ -145,13 +152,15 @@ class IngestionService(LoggerMixin):
             newly_stored = stored_papers["papers"]
 
             # Step 3: Generate embeddings (if requested and papers were stored)
-            if generate_embeddings and stats["stored"] > 0:
+            if generate_embeddings and stats["stored"] > 0 and self.embedding_service:
                 self.log_info("Generating embeddings for new papers...")
                 embedding_result = await self.embedding_service.embed_papers_batch(
                     newly_stored,
                     force_update=False
                 )
                 stats["embeddings_generated"] = embedding_result
+            elif generate_embeddings and self.embedding_service is None:
+                self.log_warning("Embedding generation requested but service unavailable")
 
             # Step 4: Extract concepts (if requested)
             if extract_concepts and stats["stored"] > 0:
@@ -194,7 +203,7 @@ class IngestionService(LoggerMixin):
             try:
                 # Check if paper already exists
                 existing = await database.fetch_one(
-                    text("SELECT id FROM papers WHERE id = :paper_id"),
+                    "SELECT id FROM papers WHERE id = :paper_id",
                     {"paper_id": paper["id"]}
                 )
 
@@ -205,7 +214,7 @@ class IngestionService(LoggerMixin):
 
                 # Insert new paper
                 await database.execute(
-                    text("""
+                    """
                         INSERT INTO papers (
                             id, title, abstract, authors, published_date,
                             updated_date, category, ingested_at
@@ -213,7 +222,7 @@ class IngestionService(LoggerMixin):
                             :id, :title, :abstract, :authors, :published_date,
                             :updated_date, :category, CURRENT_TIMESTAMP
                         )
-                    """),
+                    """,
                     {
                         "id": paper["id"],
                         "title": paper["title"],
