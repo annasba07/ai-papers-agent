@@ -95,6 +95,18 @@
 
 > Full SQL lives in `/backend/app/db/models.py` and associated migrations. The table maps above highlight intent and linkage across nodes.
 
+### Enrichment Flow (Scaffold)
+
+1. **Paper ingestion** calls `_store_papers` then `_enrich_research_graph` (see `IngestionService`). The enrichment hook currently wires up:
+   - `OpenAlexProvider` for citation edges, author/organisation data, and technique hints.
+   - `PapersWithCodeProvider` for benchmark observations plus taxonomy seeds.
+   - `GitHubRepoProvider` placeholder for repository health metrics.
+2. **ResearchGraphService** centralises writes into the new entities and relationship tables so retries/chunking can be added later without touching ingestion logic.
+3. **Next milestones**
+   - Implement provider HTTP clients, pagination, and rate limiting.
+   - Bulk upsert citation edges and benchmark rows via dedicated helpers.
+   - Build an enrichment scheduler (Celery/Temporal) to backfill and refresh signals.
+
 ### Critical Indexes
 
 ```sql

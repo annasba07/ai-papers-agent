@@ -15,15 +15,31 @@ from sqlalchemy import text
 from app.db.database import database
 from app.services.arxiv_service import arxiv_service
 from app.services.embedding_service import get_embedding_service
+from app.services import get_research_graph_service
+from app.services.providers import (
+    OpenAlexProvider,
+    PapersWithCodeProvider,
+    GitHubRepoProvider,
+)
+from app.services.providers.base import ProviderError
 from app.utils.logger import LoggerMixin
 
 
 class IngestionService(LoggerMixin):
     """Service for ingesting papers into the knowledge graph"""
 
-    def __init__(self):
+    def __init__(
+        self,
+        openalex_provider: OpenAlexProvider | None = None,
+        pwc_provider: PapersWithCodeProvider | None = None,
+        github_provider: GitHubRepoProvider | None = None
+    ):
         self.arxiv_service = arxiv_service
         self.embedding_service = get_embedding_service()
+        self.research_graph_service = get_research_graph_service()
+        self.openalex_provider = openalex_provider or OpenAlexProvider()
+        self.pwc_provider = pwc_provider or PapersWithCodeProvider()
+        self.github_provider = github_provider or GitHubRepoProvider()
         self.log_info("Ingestion service initialized")
 
     async def ingest_papers(
@@ -87,12 +103,13 @@ class IngestionService(LoggerMixin):
             stats["stored"] = stored_papers["stored"]
             stats["duplicates"] = stored_papers["duplicates"]
             stats["errors"] = stored_papers["errors"]
+            newly_stored = stored_papers["papers"]
 
             # Step 3: Generate embeddings (if requested and papers were stored)
             if generate_embeddings and stats["stored"] > 0:
                 self.log_info("Generating embeddings for new papers...")
                 embedding_result = await self.embedding_service.embed_papers_batch(
-                    papers[:stats["stored"]],
+                    newly_stored,
                     force_update=False
                 )
                 stats["embeddings_generated"] = embedding_result
@@ -104,9 +121,13 @@ class IngestionService(LoggerMixin):
 
                 self.log_info("Extracting concepts from new papers...")
                 concept_result = await concept_service.extract_concepts_batch(
-                    papers[:stats["stored"]]
+                    newly_stored
                 )
                 stats["concepts_extracted"] = concept_result["total_concepts"]
+
+            # Step 5: Research graph enrichment scaffold
+            if newly_stored:
+                await self._enrich_research_graph(newly_stored)
 
             self.log_info("Ingestion pipeline complete", stats=stats)
             return stats
@@ -126,7 +147,8 @@ class IngestionService(LoggerMixin):
         result = {
             "stored": 0,
             "duplicates": 0,
-            "errors": 0
+            "errors": 0,
+            "papers": []
         }
 
         for paper in papers:
@@ -165,6 +187,17 @@ class IngestionService(LoggerMixin):
                 )
 
                 result["stored"] += 1
+                result["papers"].append(
+                    {
+                        "id": paper["id"],
+                        "title": paper["title"],
+                        "abstract": paper["summary"],
+                        "authors": paper["authors"],
+                        "published": paper["published"],
+                        "category": paper["category"],
+                        "link": paper.get("link"),
+                    }
+                )
                 self.log_debug(f"Stored paper {paper['id']}: {paper['title'][:50]}...")
 
             except Exception as e:
@@ -172,6 +205,49 @@ class IngestionService(LoggerMixin):
                 self.log_error(f"Failed to store paper {paper.get('id', 'unknown')}", error=e)
 
         return result
+
+    async def _enrich_research_graph(self, papers: List[Dict[str, Any]]) -> None:
+        """
+        Placeholder for the Atlas enrichment layer. Currently logs intended operations.
+        """
+        paper_ids = [paper["id"] for paper in papers if paper.get("id")]
+        if not paper_ids:
+            return
+
+        self.log_info("Enriching research graph for papers", paper_count=len(paper_ids))
+
+        # Author + organisation enrichment
+        try:
+            author_payloads = await self.openalex_provider.fetch_authors_and_affiliations(paper_ids)
+            for payload in author_payloads:
+                await self.research_graph_service.upsert_authors(
+                    payload.get("authors", []),
+                    paper_id=payload.get("paper_id")
+                )
+        except ProviderError as exc:
+            self.log_warning("Author enrichment failed", error=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            self.log_warning("Unexpected author enrichment failure", error=str(exc))
+
+        # Citation edges
+        try:
+            citation_edges = await self.openalex_provider.fetch_citation_edges(paper_ids)
+            if citation_edges:
+                self.log_debug("Citation enrichment ready", edges=len(citation_edges))
+                # TODO: insert via bulk copy utility once implemented
+        except Exception as exc:  # noqa: BLE001
+            self.log_warning("Citation enrichment failed", error=str(exc))
+
+        # Benchmarks and taxonomy seeds
+        try:
+            observations = await self.pwc_provider.fetch_benchmark_observations(paper_ids)
+            if observations:
+                self.log_debug("Benchmark enrichment ready", observations=len(observations))
+                # TODO: call research_graph_service to persist benchmark rows
+        except ProviderError as exc:
+            self.log_warning("Benchmark enrichment failed", error=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            self.log_warning("Unexpected benchmark enrichment failure", error=str(exc))
 
     async def ingest_by_category(
         self,

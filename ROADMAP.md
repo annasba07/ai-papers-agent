@@ -60,6 +60,7 @@
 3. **Signal Ingestion Jobs**
    - Extend ingestion to capture GitHub stats, benchmark metrics (Papers With Code), conference acceptances.
    - Build incremental ETL jobs (dbt/Spark) for momentum metrics (velocity, acceleration, novelty).
+   - Harden the new provider adapters (OpenAlex, PWC, GitHub) and wire them into the ingestion enrichment hooks.
 
 **Milestone:** API can answer graph questions like “what techniques are rising for real-time control?” with supporting metrics.
 
