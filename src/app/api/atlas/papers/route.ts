@@ -53,8 +53,8 @@ export async function GET(request: Request) {
     const limited = filtered.slice(0, limit);
 
     return NextResponse.json({ papers: limited });
-  } catch (error: any) {
-    const message = error?.message ?? 'Unknown error';
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: `Failed to read atlas papers: ${message}` },
       { status: 500 },
