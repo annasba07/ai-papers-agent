@@ -96,6 +96,52 @@ async def ingest_recent(categories: List[str], max_per_category: int, embeddings
     print_stats(stats, "Recent Papers Ingestion Complete")
 
 
+async def bootstrap_recent_atlas(
+    categories: List[str],
+    years: int,
+    window_months: int,
+    max_per_window: int,
+    embeddings: bool,
+    extract_concepts: bool
+):
+    """Seed the atlas with the last N years of papers."""
+    print_header(
+        f"Bootstrapping Atlas ({years} years, {window_months}-month windows)"
+    )
+
+    service = get_ingestion_service()
+
+    summary = await service.bootstrap_recent_atlas(
+        categories=categories,
+        years=years,
+        window_months=window_months,
+        max_per_window=max_per_window,
+        generate_embeddings=embeddings,
+        extract_concepts=extract_concepts
+    )
+
+    print_stats(
+        {
+            "categories": ", ".join(summary["categories"]),
+            "windows": summary["total_windows"],
+            "max_per_window": summary["max_per_window"]
+        },
+        "Bootstrap Parameters"
+    )
+
+    print("\n📦 Category Breakdown")
+    print("-" * 50)
+    for stat in summary["stats"]:
+        print(
+            f"{stat['category']}: "
+            f"windows={stat['windows_processed']}, "
+            f"stored={stat['stored']}, "
+            f"duplicates={stat['duplicates']}, "
+            f"errors={stat['errors']}"
+        )
+    print("-" * 50 + "\n")
+
+
 async def ingest_specific_paper(arxiv_id: str, embeddings: bool, concepts: bool):
     """Ingest a specific paper by ID"""
     print_header(f"Ingesting Paper: {arxiv_id}")
@@ -215,6 +261,9 @@ Examples:
   # Ingest recent papers from multiple categories
   python -m app.cli.ingest --recent --categories cs.AI cs.LG cs.CV --max-per 30
 
+  # Bootstrap atlas with last 3 years (quarterly windows)
+  python -m app.cli.ingest --bootstrap-atlas --years 3 --window-months 3 --max-window 200
+
   # Ingest a specific paper
   python -m app.cli.ingest --paper 2010.11929
 
@@ -233,6 +282,7 @@ Examples:
     parser.add_argument("--category", help="arXiv category (e.g., cs.AI, cs.CV, cs.LG)")
     parser.add_argument("--query", help="Search query")
     parser.add_argument("--recent", action="store_true", help="Ingest recent papers from multiple categories")
+    parser.add_argument("--bootstrap-atlas", action="store_true", help="Seed atlas with the last N years of research")
     parser.add_argument("--paper", help="Specific paper ID to ingest")
 
     # Options
@@ -240,6 +290,9 @@ Examples:
     parser.add_argument("--max-per", type=int, default=50, help="Max papers per category for --recent mode")
     parser.add_argument("--categories", nargs="+", default=["cs.AI", "cs.LG", "cs.CV"],
                        help="Categories for --recent mode (default: cs.AI cs.LG cs.CV)")
+    parser.add_argument("--years", type=int, default=3, help="Number of years for --bootstrap-atlas (default: 3)")
+    parser.add_argument("--window-months", type=int, default=3, help="Months per window for --bootstrap-atlas (default: 3)")
+    parser.add_argument("--max-window", type=int, default=200, help="Max papers per window for --bootstrap-atlas (default: 200)")
 
     # Processing flags
     parser.add_argument("--no-embeddings", action="store_true", help="Skip embedding generation")
@@ -287,6 +340,16 @@ Examples:
                 categories=args.categories,
                 max_per_category=args.max_per,
                 embeddings=not args.no_embeddings
+            )
+
+        elif args.bootstrap_atlas:
+            await bootstrap_recent_atlas(
+                categories=args.categories,
+                years=args.years,
+                window_months=args.window_months,
+                max_per_window=args.max_window,
+                embeddings=not args.no_embeddings,
+                extract_concepts=args.extract_concepts
             )
 
         elif args.category:

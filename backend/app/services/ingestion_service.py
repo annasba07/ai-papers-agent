@@ -8,8 +8,8 @@ Orchestrates the full pipeline:
 4. Generate embeddings
 """
 import asyncio
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime, timedelta
 from sqlalchemy import text
 
 from app.db.database import database
@@ -41,6 +41,45 @@ class IngestionService(LoggerMixin):
         self.pwc_provider = pwc_provider or PapersWithCodeProvider()
         self.github_provider = github_provider or GitHubRepoProvider()
         self.log_info("Ingestion service initialized")
+
+    @staticmethod
+    def _shift_month(anchor: datetime, months: int) -> datetime:
+        """Return a datetime representing the first day of the shifted month."""
+        total_months = anchor.year * 12 + (anchor.month - 1) + months
+        new_year = total_months // 12
+        new_month = total_months % 12 + 1
+        return datetime(new_year, new_month, 1)
+
+    @staticmethod
+    def _format_arxiv_datetime(dt: datetime) -> str:
+        """Format datetime in arXiv API style: YYYYMMDDHHMM."""
+        return dt.strftime("%Y%m%d%H%M")
+
+    def _generate_time_windows(
+        self,
+        years: int,
+        window_months: int
+    ) -> List[Tuple[datetime, datetime]]:
+        """
+        Produce chronological month windows covering the last `years`.
+        """
+        if window_months < 1:
+            raise ValueError("window_months must be >= 1")
+
+        now = datetime.utcnow()
+        window_start_anchor = datetime(now.year, now.month, 1)
+        earliest_start = self._shift_month(window_start_anchor, -years * 12)
+
+        windows = []
+        current_start = earliest_start
+
+        while current_start < now:
+            next_start = self._shift_month(current_start, window_months)
+            window_end = min(next_start - timedelta(minutes=1), now)
+            windows.append((current_start, window_end))
+            current_start = next_start
+
+        return windows
 
     async def ingest_papers(
         self,
@@ -325,6 +364,99 @@ class IngestionService(LoggerMixin):
 
         self.log_info("Completed ingesting recent papers", stats=combined_stats)
         return combined_stats
+
+    async def bootstrap_recent_atlas(
+        self,
+        categories: List[str],
+        years: int = 3,
+        window_months: int = 3,
+        max_per_window: int = 200,
+        generate_embeddings: bool = False,
+        extract_concepts: bool = False,
+        sleep_seconds: float = 0.5
+    ) -> Dict[str, Any]:
+        """
+        Seed the research atlas with papers from the last N years (chunked by window).
+
+        This focuses on recent research so we can demonstrate the rich atlas UX
+        without ingesting the full historical corpus.
+        """
+        if years < 1:
+            raise ValueError("years must be >= 1")
+
+        windows = self._generate_time_windows(years=years, window_months=window_months)
+        total_windows = len(windows)
+        self.log_info(
+            "Bootstrapping recent atlas",
+            categories=len(categories),
+            years=years,
+            window_months=window_months,
+            windows=total_windows
+        )
+
+        summary = {
+            "categories": categories,
+            "years": years,
+            "window_months": window_months,
+            "max_per_window": max_per_window,
+            "total_windows": total_windows,
+            "stats": []
+        }
+
+        for category in categories:
+            category_stats = {
+                "category": category,
+                "windows_processed": 0,
+                "fetched": 0,
+                "stored": 0,
+                "duplicates": 0,
+                "errors": 0
+            }
+
+            for start, end in windows:
+                query = (
+                    f"cat:{category} AND submittedDate:["
+                    f"{self._format_arxiv_datetime(start)} TO {self._format_arxiv_datetime(end)}]"
+                )
+
+                self.log_info(
+                    "Processing window",
+                    category=category,
+                    start=start.isoformat(),
+                    end=end.isoformat(),
+                    query=query
+                )
+
+                try:
+                    stats = await self.ingest_papers(
+                        query=query,
+                        max_results=max_per_window,
+                        generate_embeddings=generate_embeddings,
+                        extract_concepts=extract_concepts
+                    )
+
+                    category_stats["windows_processed"] += 1
+                    category_stats["fetched"] += stats["fetched"]
+                    category_stats["stored"] += stats["stored"]
+                    category_stats["duplicates"] += stats["duplicates"]
+                    category_stats["errors"] += stats["errors"]
+
+                    await asyncio.sleep(sleep_seconds)
+
+                except Exception as exc:  # noqa: BLE001
+                    self.log_error(
+                        "Failed to process window",
+                        category=category,
+                        start=start.isoformat(),
+                        end=end.isoformat(),
+                        error=str(exc)
+                    )
+                    category_stats["errors"] += 1
+
+            summary["stats"].append(category_stats)
+
+        self.log_info("Bootstrap completed", summary=summary)
+        return summary
 
     async def ingest_specific_paper(
         self,
