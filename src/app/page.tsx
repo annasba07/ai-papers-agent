@@ -1,6 +1,7 @@
 'use client';
 import ContextualSearch from '@/components/ContextualSearch';
 import PaperList from '@/components/PaperList';
+import AtlasOverview from '@/components/AtlasOverview';
 import { Paper } from '@/types/Paper';
 import { useState, useEffect } from 'react';
 
@@ -55,6 +56,8 @@ export default function Home() {
       <div className="card" style={{ marginBottom: '32px' }}>
         <ContextualSearch />
       </div>
+
+      <AtlasOverview paperLimit={8} />
 
       <section>
         <h2>Discover Papers</h2>
