@@ -409,6 +409,65 @@ code {
   margin: 0;
 }
 
+.contextual-search {
+  display: grid;
+  gap: 20px;
+}
+
+.contextual-search__header {
+  display: grid;
+  gap: 12px;
+}
+
+.contextual-search__subtitle {
+  color: var(--secondary-text);
+}
+
+.contextual-search__form {
+  display: grid;
+  gap: 16px;
+}
+
+.contextual-search__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.contextual-search__submit {
+  align-self: flex-start;
+}
+
+.contextual-search__tip {
+  font-size: 0.85rem;
+  color: var(--secondary-text);
+}
+
+.contextual-search__progress {
+  margin-top: 12px;
+}
+
+.contextual-search__results {
+  display: grid;
+  gap: 28px;
+  margin-top: 12px;
+}
+
+.contextual-search__analysis {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(236, 72, 153, 0.08));
+  border-left: 4px solid var(--accent-blue);
+}
+
+.contextual-search__heading {
+  margin-bottom: 12px;
+}
+
+.contextual-search__alert {
+  margin-bottom: 16px;
+}
+
 .paper-discovery {
   display: grid;
   gap: 24px;
@@ -1503,12 +1562,6 @@ code {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Enhanced analysis report styling */
-.contextual-search-results + div .card {
-  background: linear-gradient(135deg, rgba(66, 133, 244, 0.02), rgba(156, 39, 176, 0.02));
-  border-left: 4px solid var(--accent-blue);
 }
 
 /* Mobile responsive */
