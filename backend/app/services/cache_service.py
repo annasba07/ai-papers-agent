@@ -118,7 +118,10 @@ class CacheService(LoggerMixin):
             pattern = "paper_analysis:*"
             keys = self.redis_client.keys(pattern)
             if keys:
-                deleted_count = self.redis_client.delete(*keys)
+                if self.use_redis:
+                    deleted_count = self.redis_client.delete(*keys)
+                else:
+                    deleted_count = sum(self.redis_client.delete(key) for key in keys)
                 self.log_info(f"Cleared {deleted_count} cached analyses")
             else:
                 self.log_info("No cached analyses to clear")

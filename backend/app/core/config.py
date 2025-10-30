@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # AI Service Configuration
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-1.5-flash"
+    OPENAI_API_KEY: Optional[str] = None
 
     # Rate Limiting
     MAX_PAPERS_PER_BATCH: int = 20

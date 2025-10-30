@@ -1,19 +1,27 @@
 # AI Paper Digest
 
-An intelligent research paper analysis platform that helps researchers discover, understand, and apply cutting-edge AI research from arXiv. Powered by Google's Gemini AI for comprehensive paper analysis and contextual recommendations.
+An intelligent, evolving research atlas that helps teams navigate the entire AI landscape—from discovering the latest work to understanding technique lineages and implementing state-of-the-art solutions. The platform combines automated analysis, knowledge-graph reasoning, and visual exploration so researchers can see where the frontier is moving and ship production-ready code faster.
 
-## Features
+## Vision
 
-- **📚 Smart Paper Discovery**: Browse recent AI/ML papers from arXiv with intelligent filtering
-- **🤖 AI-Powered Analysis**: Comprehensive paper summaries with:
-  - Key contributions and novelty assessment
-  - Technical methodology breakdown
-  - Performance highlights and implementation insights
-  - Research context and future implications
-  - Practical applicability scores
-- **🔍 Contextual Search**: Describe your project and get tailored paper recommendations with implementation guidance
-- **📊 Smart Badges**: Quick visual indicators for impact score, difficulty level, reading time, and more
-- **⚡ Real-time Processing**: Async backend for fast, concurrent paper analysis
+> **Help AI researchers go from idea → production code in hours, not months, by mapping the research universe, highlighting the frontier, and auto-generating implementation playbooks.**
+
+The platform is being built around four complementary pillars:
+
+1. **Living Research Graph** – A dense, constantly-updated graph linking papers, techniques, datasets, benchmarks, institutions, and authors. Semantic search, citation lineages, and concept ontologies expose connections that keyword search misses.
+2. **Deep Paper Intelligence** – Gemini-powered analysis plus PDF table parsing extract techniques, metrics, code availability, novelty, and implementation insights. Benchmark deltas, performance trends, and reproducibility signals surface automatically.
+3. **Exploratory Atlas UI** – Interactive maps, timelines, and benchmark leaderboards let you see where topics are heating up, which approaches dominate, and how methods evolve over time. Contextual search and guided flows help you plan projects from vague goals.
+4. **Implementation Acceleration** – Multi-agent code generation turns paper insights into runnable projects with tests and debugging loops, enabling engineers to go from literature review to prototype with minimal hand-holding.
+
+## Current Capabilities
+
+- **📚 Smart Paper Discovery** – Browse recent AI/ML papers with intelligent filtering and semantic augmentation.
+- **🤖 AI-Powered Analysis** – Comprehensive summaries covering novelty, methodology, performance, context, limitations, applicability, and code availability.
+- **🔍 Contextual Search** – Describe your project and receive tailored paper recommendations with actionable guidance.
+- **💻 Code Detection** – Identify official and community implementations, ranked by a quality heuristic.
+- **📊 Insightful Badges** – Impact, difficulty, reading time, significance, and practicality at a glance.
+- **⚡ Async Processing Stack** – FastAPI + background tasks deliver concurrent analysis and caching with Redis or in-memory fallback.
+- **🗂️ Local Atlas Bootstrap** – Seed the research atlas by downloading the last N years of arXiv papers to NDJSON files (`--dump-dir`) and build derived JSON datasets for the prototype UI (`python -m app.cli.build_atlas_dataset`).
 
 ## Tech Stack
 

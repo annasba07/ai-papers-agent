@@ -22,6 +22,10 @@ class EmbeddingService:
     """Service for generating and caching embeddings"""
 
     def __init__(self):
+        if not settings.OPENAI_API_KEY:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable is required for embedding generation."
+            )
         self.client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = "text-embedding-3-small"
         self.dimensions = 1536

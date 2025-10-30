@@ -59,6 +59,15 @@ const SmartBadges: React.FC<SmartBadgesProps> = ({
     }
   };
 
+  const getReproductionColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'low': return 'var(--accent-emerald)';
+      case 'medium': return 'var(--accent-orange)';
+      case 'high': return 'var(--accent-pink)';
+      default: return 'var(--secondary-text)';
+    }
+  };
+
   const getSignificanceIcon = (significance: string) => {
     switch (significance) {
       case 'breakthrough': return '🚀';
@@ -159,6 +168,16 @@ const SmartBadges: React.FC<SmartBadgesProps> = ({
               {practicalApplicability === 'high' ? '🚀' : practicalApplicability === 'medium' ? '⚡' : '🔬'}
             </span>
             <span className="badge-text">Practical</span>
+          </div>
+        </div>
+      )}
+
+      {/* Reproduction Difficulty (only show in md size) */}
+      {size === 'md' && (
+        <div className={`${badgeClass} reproduction-badge`} style={{ borderColor: getReproductionColor(reproductionDifficulty) }}>
+          <div className="badge-content">
+            <span className="badge-icon">🧬</span>
+            <span className="badge-text">{reproductionDifficulty}</span>
           </div>
         </div>
       )}
