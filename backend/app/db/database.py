@@ -25,21 +25,32 @@ DATABASE_URL = os.getenv(
     os.getenv("DATABASE_URL", "postgresql://localhost/ai_papers")
 )
 
+IS_SQLITE = DATABASE_URL.startswith("sqlite")
+
 # For async operations (FastAPI)
-# Configuration optimized for Supabase Session Mode with connection pooling
-database = Database(
-    DATABASE_URL,
-    min_size=5,          # Minimum connections in pool
-    max_size=20          # Maximum connections in pool
-)
+if IS_SQLITE:
+    database = Database(DATABASE_URL)
+else:
+    # Configuration optimized for Supabase Session Mode with connection pooling
+    database = Database(
+        DATABASE_URL,
+        min_size=5,          # Minimum connections in pool
+        max_size=20          # Maximum connections in pool
+    )
 
 # For SQLAlchemy models
-engine = create_engine(
-    DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://"),
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20
-)
+if IS_SQLITE:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://"),
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -51,7 +62,7 @@ metadata = MetaData()
 async def connect_db():
     """Connect to database on startup"""
     await database.connect()
-    print(f"✅ Connected to Supabase PostgreSQL")
+    print(f"✅ Connected to database ({'SQLite' if IS_SQLITE else 'PostgreSQL'})")
 
 
 async def disconnect_db():

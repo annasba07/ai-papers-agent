@@ -66,6 +66,123 @@ class Paper(Base):
     )
 
 
+class Technique(Base):
+    """
+    Canonical technique/model/architecture entity referenced by papers
+    """
+    __tablename__ = "techniques"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), unique=True, nullable=False)
+    normalized_name = Column(String(200), nullable=False, index=True)
+    method_type = Column(String(100), nullable=True, index=True)
+    emergence_date = Column(DateTime, nullable=True)
+    maturity_score = Column(Float, default=0.0)
+    description = Column(Text, nullable=True)
+    embedding = Column(Vector(1536), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('techniques_type_maturity_idx', 'method_type', 'maturity_score'),
+    )
+
+
+class Task(Base):
+    """
+    Downstream problems or objectives addressed by papers/techniques
+    """
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), unique=True, nullable=False)
+    taxonomy_path = Column(String(400), nullable=True)
+    modality = Column(String(100), nullable=True, index=True)
+    application_domain = Column(String(150), nullable=True, index=True)
+    description = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('tasks_taxonomy_idx', 'taxonomy_path'),
+    )
+
+
+class Dataset(Base):
+    """
+    Datasets used for training/evaluation
+    """
+    __tablename__ = "datasets"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), unique=True, nullable=False)
+    normalized_name = Column(String(200), nullable=False, index=True)
+    modality = Column(String(100), nullable=True, index=True)
+    sample_count = Column(Integer, nullable=True)
+    license = Column(String(100), nullable=True)
+    maintainer = Column(String(200), nullable=True)
+    url = Column(String(300), nullable=True)
+    embedding = Column(Vector(1536), nullable=True)
+    extra_metadata = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('datasets_modality_idx', 'modality'),
+    )
+
+
+class Organisation(Base):
+    """
+    Institutions, labs, and companies associated with authors/papers
+    """
+    __tablename__ = "organisations"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(200), unique=True, nullable=False)
+    kind = Column(String(50), nullable=True, index=True)  # academic, industry, open_source
+    region = Column(String(100), nullable=True, index=True)
+    homepage = Column(String(300), nullable=True)
+    research_focus = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('organisations_kind_region_idx', 'kind', 'region'),
+    )
+
+
+class Author(Base):
+    """
+    Individual researchers with optional ORCID and affiliation data
+    """
+    __tablename__ = "authors"
+
+    id = Column(Integer, primary_key=True)
+    full_name = Column(String(200), nullable=False)
+    normalized_name = Column(String(200), nullable=False, index=True)
+    orcid = Column(String(50), nullable=True, unique=True)
+    homepage = Column(String(300), nullable=True)
+    primary_affiliation_id = Column(
+        Integer,
+        ForeignKey('organisations.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    stats = Column(JSONB, nullable=True)  # Aggregate metrics (citations, h-index, etc.)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index('authors_affiliation_idx', 'primary_affiliation_id'),
+        UniqueConstraint('full_name', 'primary_affiliation_id', name='uq_authors_name_affiliation'),
+    )
+
+
 class Concept(Base):
     """
     Research concepts/topics/techniques extracted from papers
@@ -177,10 +294,22 @@ class Benchmark(Base):
         index=True
     )
 
-    # What was tested
+    # What was tested (structured + legacy strings)
+    task_id = Column(
+        Integer,
+        ForeignKey('tasks.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )
+    dataset_id = Column(
+        Integer,
+        ForeignKey('datasets.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True
+    )
     task = Column(String(100), nullable=False, index=True)
     dataset = Column(String(100), nullable=False, index=True)
-    metric = Column(String(50), nullable=False)
+    metric = Column(String(50), nullable=False, index=True)
 
     # Performance
     value = Column(Float, nullable=False)
@@ -193,6 +322,7 @@ class Benchmark(Base):
     # Metadata
     reported_date = Column(DateTime, nullable=True)
     extra_metadata = Column(JSONB, nullable=True)
+    evidence_source = Column(String(50), nullable=True)  # llm, table_extraction, pwc
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -201,8 +331,210 @@ class Benchmark(Base):
             'paper_id', 'task', 'dataset', 'metric', 'model_name',
             name='unique_benchmark'
         ),
+        UniqueConstraint(
+            'paper_id', 'task_id', 'dataset_id', 'metric', 'model_name',
+            name='unique_benchmark_fk'
+        ),
         Index('benchmarks_task_dataset_value_idx', 'task', 'dataset', 'value'),
         Index('benchmarks_task_dataset_date_idx', 'task', 'dataset', 'reported_date'),
+        Index('benchmarks_task_id_dataset_id_idx', 'task_id', 'dataset_id'),
+    )
+
+
+class PaperTechnique(Base):
+    """
+    Mapping between papers and techniques with roles (e.g., core, baseline)
+    """
+    __tablename__ = "paper_techniques"
+
+    paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    technique_id = Column(
+        Integer,
+        ForeignKey('techniques.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    role = Column(String(50), nullable=True)  # core, baseline, ablation, comparison
+    confidence = Column(Float, default=1.0)
+    evidence_source = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint('confidence >= 0 AND confidence <= 1', name='check_paper_technique_confidence'),
+        Index('paper_techniques_technique_role_idx', 'technique_id', 'role'),
+        Index('paper_techniques_paper_idx', 'paper_id'),
+    )
+
+
+class PaperTask(Base):
+    """
+    Mapping between papers and the tasks/problems they address
+    """
+    __tablename__ = "paper_tasks"
+
+    paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    task_id = Column(
+        Integer,
+        ForeignKey('tasks.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    evidence_source = Column(String(50), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index('paper_tasks_task_idx', 'task_id'),
+        Index('paper_tasks_paper_idx', 'paper_id'),
+    )
+
+
+class PaperDataset(Base):
+    """
+    Mapping between papers and datasets they use
+    """
+    __tablename__ = "paper_datasets"
+
+    paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    dataset_id = Column(
+        Integer,
+        ForeignKey('datasets.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    usage_type = Column(String(50), nullable=True)  # train / eval / pretrain
+    notes = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index('paper_datasets_dataset_idx', 'dataset_id', 'usage_type'),
+        Index('paper_datasets_paper_idx', 'paper_id'),
+    )
+
+
+class PaperAuthor(Base):
+    """
+    Authorship ordering and roles for papers
+    """
+    __tablename__ = "paper_authors"
+
+    paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    author_id = Column(
+        Integer,
+        ForeignKey('authors.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    author_order = Column(Integer, nullable=True)
+    is_corresponding = Column(Boolean, default=False)
+
+    __table_args__ = (
+        Index('paper_authors_author_idx', 'author_id'),
+        Index('paper_authors_order_idx', 'paper_id', 'author_order'),
+    )
+
+
+class AuthorOrganisation(Base):
+    """
+    Historical affiliations for authors
+    """
+    __tablename__ = "author_organisations"
+
+    id = Column(Integer, primary_key=True)
+    author_id = Column(
+        Integer,
+        ForeignKey('authors.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    organisation_id = Column(
+        Integer,
+        ForeignKey('organisations.id', ondelete='CASCADE'),
+        nullable=False
+    )
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    role = Column(String(100), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            'author_id', 'organisation_id', 'start_date', 'end_date',
+            name='uq_author_org_tenure'
+        ),
+        Index('author_organisations_author_idx', 'author_id'),
+        Index('author_organisations_org_idx', 'organisation_id'),
+    )
+
+
+class TechniqueRelationship(Base):
+    """
+    Relationships between techniques (extends, alternative_to, compatible_with, etc.)
+    """
+    __tablename__ = "technique_relationships"
+
+    technique_a_id = Column(
+        Integer,
+        ForeignKey('techniques.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    technique_b_id = Column(
+        Integer,
+        ForeignKey('techniques.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    relation_type = Column(String(50), nullable=False)
+    weight = Column(Float, nullable=True)
+    first_seen_paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        CheckConstraint('technique_a_id < technique_b_id', name='check_technique_relationship_order'),
+        Index('technique_relationships_type_idx', 'relation_type'),
+    )
+
+
+class TechniqueBenchmark(Base):
+    """
+    Associative table connecting techniques to benchmark results
+    """
+    __tablename__ = "technique_benchmarks"
+
+    technique_id = Column(
+        Integer,
+        ForeignKey('techniques.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    benchmark_id = Column(
+        Integer,
+        ForeignKey('benchmarks.id', ondelete='CASCADE'),
+        primary_key=True
+    )
+    delta_from_sota = Column(Float, nullable=True)
+    sota_paper_id = Column(
+        String(50),
+        ForeignKey('papers.id', ondelete='SET NULL'),
+        nullable=True
+    )
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index('technique_benchmarks_delta_idx', 'delta_from_sota'),
     )
 
 

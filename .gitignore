@@ -50,6 +50,7 @@ __pycache__/
 .Python
 env/
 venv/
+venv-py311/
 ENV/
 env.bak/
 venv.bak/
@@ -59,6 +60,7 @@ venv.bak/
 *.db
 *.sqlite
 *.sqlite3
+data/
 
 # IDE
 .vscode/

@@ -5,6 +5,7 @@ import feedparser
 import asyncio
 from typing import List, Dict, Any
 from datetime import datetime
+from urllib.parse import quote_plus
 from app.core.config import settings
 from app.utils.logger import LoggerMixin
 from app.utils.exceptions import ArxivAPIException
@@ -23,8 +24,9 @@ class ArxivService(LoggerMixin):
         if max_results is None:
             max_results = self.max_results
         
-        # Construct search URL
-        search_url = f"{self.base_url}?search_query={query}&start=0&max_results={max_results}&sortBy=submittedDate&sortOrder=descending"
+        # Construct search URL with properly encoded query
+        encoded_query = quote_plus(query)
+        search_url = f"{self.base_url}?search_query={encoded_query}&start=0&max_results={max_results}&sortBy=submittedDate&sortOrder=descending"
         
         self.log_info("Searching arXiv papers", query=query, max_results=max_results)
         

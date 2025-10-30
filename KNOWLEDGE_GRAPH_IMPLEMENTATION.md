@@ -69,148 +69,43 @@
 
 ## 📊 Database Schema
 
-### Core Tables
+### Core Entities (Atlas v2)
 
-```sql
--- ================================================================
--- PAPERS TABLE - Core paper metadata with vector embeddings
--- ================================================================
-CREATE TABLE papers (
-    -- Identity
-    id VARCHAR(50) PRIMARY KEY,                -- arXiv ID: "2010.11929"
+| Entity | Purpose | Key Fields | Primary Sources |
+|--------|---------|------------|-----------------|
+| `papers` | Canonical publication record with embeddings and AI analysis | arxiv_id, title, abstract, category, embedding, ai_analysis, quality_score | arXiv, Semantic Scholar, Gemini |
+| `techniques` | Models/architectures/methods referenced across papers | name, normalized_name, method_type, emergence_date, maturity_score, embedding | LLM extraction, manual curation |
+| `tasks` | Problem statements or application goals | name, taxonomy_path, modality, application_domain | Papers With Code taxonomy |
+| `datasets` | Training/evaluation corpora | name, modality, sample_count, license, maintainer, embedding | Papers With Code, Hugging Face Hub |
+| `benchmarks` | Structured performance claims | task_id, dataset_id, metric, value, reported_date, compute_cost, evidence_source | PDF table extraction, PWC API |
+| `organisations` | Universities, labs, companies | name, type (academic/industry/open-source), region, website, research_focus | arXiv metadata, GRID/ROR |
+| `authors` | Individual researchers | full_name, orcid, homepage, primary_affiliation_id, stats_json (h-index, citation_count) | arXiv, OpenAlex |
+| `concepts` | Free-form topics/ideas extracted by AI | name, category, embedding, first_seen_date, last_seen_date, paper_count | Gemini concept extraction |
 
-    -- Basic metadata
-    title TEXT NOT NULL,
-    abstract TEXT NOT NULL,
-    authors JSONB NOT NULL,                    -- ["Author 1", "Author 2", ...]
-    published_date TIMESTAMP NOT NULL,
-    updated_date TIMESTAMP,
-    category VARCHAR(20) NOT NULL,             -- "cs.AI", "cs.CV", etc.
+### Relationship Tables
 
-    -- Semantic search
-    embedding vector(1536),                    -- OpenAI text-embedding-3-small
+- `paper_techniques (paper_id, technique_id, role, confidence, evidence_source)`
+- `paper_tasks (paper_id, task_id, evidence_source)`
+- `paper_datasets (paper_id, dataset_id, usage_type, notes)`
+- `paper_authors (paper_id, author_id, author_order, is_corresponding)`
+- `author_organisations (author_id, organisation_id, start_date, end_date)`
+- `technique_relationships (technique_a_id, technique_b_id, relation_type, weight, first_seen_paper_id)`
+- `technique_benchmarks (technique_id, benchmark_id, delta_from_sota, sota_paper_id)`
+- Existing constructs (`paper_concepts`, `citations`, `paper_relationships`) continue to power core queries and plug into the richer ontology.
 
-    -- Computed metrics (denormalized for speed)
-    citation_count INTEGER DEFAULT 0,
-    influential_citation_count INTEGER DEFAULT 0,
-    quality_score FLOAT DEFAULT 0.0,           -- Computed score 0-10
+> Full SQL lives in `/backend/app/db/models.py` and associated migrations. The table maps above highlight intent and linkage across nodes.
 
-    -- Rich cached data
-    ai_analysis JSONB,                         -- Full AI analysis from Gemini
-    code_repos JSONB,                          -- GitHub repos found
-    concepts_array TEXT[],                     -- Denormalized for quick access
+### Enrichment Flow (Scaffold)
 
-    -- Full-text search
-    search_vector tsvector,                    -- Auto-generated from title + abstract
-
-    -- Housekeeping
-    ingested_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- ================================================================
--- CONCEPTS TABLE - Research topics/techniques/methods
--- ================================================================
-CREATE TABLE concepts (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(200) UNIQUE NOT NULL,         -- "attention mechanisms", "diffusion models"
-    normalized_name VARCHAR(200) NOT NULL,     -- Lowercase, cleaned
-    category VARCHAR(50),                      -- "architecture", "technique", "dataset", "task"
-
-    -- Metadata
-    paper_count INTEGER DEFAULT 0,             -- Denormalized count
-    first_seen_date TIMESTAMP DEFAULT NOW(),
-    last_seen_date TIMESTAMP DEFAULT NOW(),
-
-    -- Optional: embeddings for concept similarity
-    embedding vector(1536),
-
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- ================================================================
--- PAPER_CONCEPTS - Many-to-many with relevance scores
--- ================================================================
-CREATE TABLE paper_concepts (
-    paper_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-    concept_id INTEGER REFERENCES concepts(id) ON DELETE CASCADE,
-    relevance FLOAT NOT NULL CHECK (relevance >= 0 AND relevance <= 1),
-
-    -- Metadata
-    extraction_method VARCHAR(50),             -- "llm", "keyword", "citation"
-    confidence FLOAT DEFAULT 1.0,
-
-    PRIMARY KEY (paper_id, concept_id)
-);
-
--- ================================================================
--- CITATIONS - Directed graph of paper citations
--- ================================================================
-CREATE TABLE citations (
-    citing_paper_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-    cited_paper_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-
-    -- Citation metadata
-    is_influential BOOLEAN DEFAULT FALSE,       -- Semantic Scholar "influential citation"
-    context_snippet TEXT,                       -- Optional: where/how cited
-    section VARCHAR(50),                        -- "introduction", "related work", etc.
-
-    -- Computed
-    citation_year INTEGER,                      -- Year of citing paper (for temporal analysis)
-
-    created_at TIMESTAMP DEFAULT NOW(),
-    PRIMARY KEY (citing_paper_id, cited_paper_id)
-);
-
--- ================================================================
--- BENCHMARKS - Performance metrics on datasets
--- ================================================================
-CREATE TABLE benchmarks (
-    id SERIAL PRIMARY KEY,
-    paper_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-
-    -- What was tested
-    task VARCHAR(100) NOT NULL,                -- "image_classification", "object_detection"
-    dataset VARCHAR(100) NOT NULL,             -- "ImageNet", "COCO", "SQuAD"
-    metric VARCHAR(50) NOT NULL,               -- "accuracy", "f1", "bleu"
-
-    -- Performance
-    value FLOAT NOT NULL,
-
-    -- Additional context
-    model_name VARCHAR(200),                   -- "ResNet-50", "BERT-base"
-    model_size VARCHAR(50),                    -- "355M params"
-    compute_cost VARCHAR(100),                 -- "8x V100 GPUs"
-
-    -- Metadata
-    reported_date TIMESTAMP,
-    metadata JSONB,                            -- Flexible additional data
-
-    created_at TIMESTAMP DEFAULT NOW(),
-
-    -- Prevent duplicates
-    UNIQUE(paper_id, task, dataset, metric, model_name)
-);
-
--- ================================================================
--- PAPER_RELATIONSHIPS - Computed similarities (materialized)
--- ================================================================
-CREATE TABLE paper_relationships (
-    paper_a_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-    paper_b_id VARCHAR(50) REFERENCES papers(id) ON DELETE CASCADE,
-
-    -- Relationship types
-    semantic_similarity FLOAT,                  -- From embeddings
-    concept_similarity FLOAT,                   -- From shared concepts
-    citation_distance INTEGER,                  -- Shortest path in citation graph
-
-    -- Metadata
-    computed_at TIMESTAMP DEFAULT NOW(),
-
-    PRIMARY KEY (paper_a_id, paper_b_id),
-    CHECK (paper_a_id < paper_b_id)            -- Enforce ordering to prevent duplicates
-);
-```
+1. **Paper ingestion** calls `_store_papers` then `_enrich_research_graph` (see `IngestionService`). The enrichment hook currently wires up:
+   - `OpenAlexProvider` for citation edges, author/organisation data, and technique hints.
+   - `PapersWithCodeProvider` for benchmark observations plus taxonomy seeds.
+   - `GitHubRepoProvider` placeholder for repository health metrics.
+2. **ResearchGraphService** centralises writes into the new entities and relationship tables so retries/chunking can be added later without touching ingestion logic.
+3. **Next milestones**
+   - Implement provider HTTP clients, pagination, and rate limiting.
+   - Bulk upsert citation edges and benchmark rows via dedicated helpers.
+   - Build an enrichment scheduler (Celery/Temporal) to backfill and refresh signals.
 
 ### Critical Indexes
 
