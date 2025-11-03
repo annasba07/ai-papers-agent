@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # CORS Configuration
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
 
+    # Atlas dataset configuration
+    ATLAS_DERIVED_DIR: str = "../data/derived"
+    ATLAS_EMBED_MODEL: Optional[str] = "sentence-transformers/all-MiniLM-L6-v2"
+    ATLAS_EMBED_BATCH_SIZE: int = 64
+    CONTEXTUAL_SEARCH_TOP_K: int = 6
+    CONTEXTUAL_SEARCH_MAX_DAYS: int = 1095  # ~3 years
+
     @property
     def allowed_origins_list(self) -> list[str]:
         """Parse ALLOWED_ORIGINS string into list"""
