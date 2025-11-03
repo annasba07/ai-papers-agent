@@ -64,7 +64,7 @@ settings = Settings()
 def validate_settings():
     """Validate required settings - call this at application startup"""
     if not settings.GEMINI_API_KEY:
-        raise ValueError(
-            "GEMINI_API_KEY environment variable is required. "
-            "Get your API key from: https://makersuite.google.com/app/apikey"
+        import warnings
+        warnings.warn(
+            "GEMINI_API_KEY is not set. Falling back to offline heuristics for AI analysis."
         )

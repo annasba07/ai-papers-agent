@@ -68,3 +68,4 @@ data/
 *.swp
 *.swo
 *~
+uvicorn.log

@@ -4,7 +4,6 @@ API endpoints for paper operations
 from fastapi import APIRouter, HTTPException, Query, Body
 from typing import List, Dict, Any
 import json
-import google.generativeai as genai
 from app.services.arxiv_service import arxiv_service
 from app.services.ai_analysis_service import ai_analysis_service
 from app.schemas.paper import (
@@ -173,31 +172,34 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
     Contextual search: Analyze user's project description and find relevant papers with recommendations
     """
     try:
-        user_description = request.description
-
-        # Configure Gemini model
-        model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        user_description = request.description.strip()
+        fallback_mode = getattr(ai_analysis_service, "fallback_mode", False)
 
         # Step 1: Deconstruct user query to generate search keywords
-        deconstruct_prompt = f"""Analyze the following user project description and extract the key information needed to find relevant academic papers.
-        Identify the main problem, the domain, and any specific technologies or methodologies mentioned.
+        if fallback_mode:
+            keywords = [
+                word.strip(".,;:").lower()
+                for word in user_description.split()
+                if len(word.strip(".,;:")) > 3
+            ]
+            search_query = " ".join(keywords[:6]) or user_description[:100]
+        else:
+            deconstruct_prompt = f"""Analyze the following user project description and extract the key information needed to find relevant academic papers.
+            Identify the main problem, the domain, and any specific technologies or methodologies mentioned.
 
-        User Description: "{user_description}"
+            User Description: "{user_description}"
 
-        Return a JSON object with the following keys: "problem", "domain", "technologies", "search_query".
-        The 'search_query' should be a concise string of 3-5 keywords suitable for a semantic search on arXiv."""
+            Return a JSON object with the following keys: "problem", "domain", "technologies", "search_query".
+            The 'search_query' should be a concise string of 3-5 keywords suitable for a semantic search on arXiv."""
 
-        deconstruct_response = await ai_analysis_service.model.generate_content_async(deconstruct_prompt)
-
-        # Parse JSON response
-        try:
-            deconstructed_info = json.loads(
-                deconstruct_response.text.replace("```json", "").replace("```", "").strip()
-            )
-            search_query = deconstructed_info.get("search_query", "")
-        except json.JSONDecodeError:
-            # Fallback: use the description itself
-            search_query = user_description[:100]
+            try:
+                deconstruct_response = await ai_analysis_service.model.generate_content_async(deconstruct_prompt)
+                deconstructed_info = json.loads(
+                    deconstruct_response.text.replace("```json", "").replace("```", "").strip()
+                )
+                search_query = deconstructed_info.get("search_query", "")
+            except Exception:
+                search_query = user_description[:100]
 
         if not search_query:
             raise HTTPException(
@@ -249,8 +251,36 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
 
         **Analysis Report:**"""
 
-        synthesis_response = await ai_analysis_service.model.generate_content_async(synthesis_prompt)
-        analysis_text = synthesis_response.text
+        if fallback_mode:
+            bullet_points = "\n".join(
+                [
+                    f"- {paper.get('title', 'Untitled')} — apply ideas from the abstract for rapid experimentation."
+                    for paper in papers_for_response[:3]
+                ]
+            )
+            analysis_text = (
+                "Offline contextual summary:\n"
+                "The selected papers mirror your goals. Focus on their implementation sections and reported benchmarks.\n"
+                f"{bullet_points}\n"
+                "Connect a Gemini API key to unlock tailored strategy notes."
+            )
+        else:
+            try:
+                synthesis_response = await ai_analysis_service.model.generate_content_async(synthesis_prompt)
+                analysis_text = synthesis_response.text
+            except Exception:
+                fallback_mode = True
+                bullet_points = "\n".join(
+                    [
+                        f"- {paper.get('title', 'Untitled')} — inspect its methodology for actionable leads."
+                        for paper in papers_for_response[:3]
+                    ]
+                )
+                analysis_text = (
+                    "Contextual synthesis temporarily unavailable. "
+                    "Here is a quick brief of promising papers:\n"
+                    f"{bullet_points}"
+                )
 
         return ContextualSearchResponse(
             analysis=analysis_text,
