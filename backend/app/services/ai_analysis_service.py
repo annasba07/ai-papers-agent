@@ -12,15 +12,53 @@ from app.utils.logger import LoggerMixin
 from app.utils.exceptions import AIAnalysisException, RateLimitException
 
 
+class DummyGeminiResponse:
+    """Lightweight response object to mimic Gemini responses."""
+
+    def __init__(self, text: str = ""):
+        self.text = text
+
+
+class DummyGeminiModel:
+    """Fallback Gemini model that returns deterministic responses."""
+
+    is_dummy = True
+
+    def generate_content(self, prompt: str) -> DummyGeminiResponse:
+        return DummyGeminiResponse("")
+
+    async def generate_content_async(self, prompt: str) -> DummyGeminiResponse:
+        fallback = (
+            "Contextual analysis is running in offline mode. "
+            "Review the recommended papers for direction and connect a Gemini API key for richer synthesis."
+        )
+        return DummyGeminiResponse(fallback)
+
+
 class AIAnalysisService(LoggerMixin):
     """Service for handling AI-powered paper analysis"""
 
     def __init__(self):
         from app.core.config import validate_settings
-        validate_settings()  # Validate API key is present
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
-        self.log_info("AI Analysis Service initialized")
+
+        validate_settings()  # May emit warnings but won't abort
+
+        self.fallback_mode = False
+
+        try:
+            if not settings.GEMINI_API_KEY:
+                raise ValueError("GEMINI_API_KEY missing")
+
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+            self.log_info("AI Analysis Service initialized")
+        except Exception as exc:
+            self.fallback_mode = True
+            self.model = DummyGeminiModel()
+            self.log_warning(
+                "Gemini model unavailable; continuing with deterministic fallbacks",
+                error=str(exc)
+            )
     
     async def generate_technical_analysis(self, abstract: str, title: str) -> Dict[str, Any]:
         """Generate technical analysis of the paper"""
@@ -38,7 +76,15 @@ class AIAnalysisService(LoggerMixin):
         
         Return as JSON with keys: keyContribution, methodologyBreakdown, performanceHighlights, implementationInsights
         """
-        
+
+        if self.fallback_mode:
+            return {
+                "keyContribution": "Novel technical approach identified",
+                "methodologyBreakdown": "Advanced methodology analysis",
+                "performanceHighlights": "Significant performance improvements",
+                "implementationInsights": "Moderate implementation complexity"
+            }
+
         try:
             response = await asyncio.to_thread(self.model.generate_content, prompt)
             
@@ -79,7 +125,15 @@ class AIAnalysisService(LoggerMixin):
         
         Return as JSON with keys: researchContext, futureImplications, limitations, researchSignificance
         """
-        
+
+        if self.fallback_mode:
+            return {
+                "researchContext": "Advances current research in the field",
+                "futureImplications": "Opens new research directions",
+                "limitations": "Some implementation constraints exist",
+                "researchSignificance": "significant"
+            }
+
         try:
             response = await asyncio.to_thread(self.model.generate_content, prompt)
             
@@ -123,7 +177,18 @@ class AIAnalysisService(LoggerMixin):
         
         Return as JSON with keys: impactScore, difficultyLevel, readingTime, hasCode, implementationComplexity, practicalApplicability, reproductionDifficulty
         """
-        
+
+        if self.fallback_mode:
+            return {
+                "impactScore": 7,
+                "difficultyLevel": "intermediate",
+                "readingTime": 15,
+                "hasCode": False,
+                "implementationComplexity": "medium",
+                "practicalApplicability": "medium",
+                "reproductionDifficulty": "medium"
+            }
+
         try:
             response = await asyncio.to_thread(self.model.generate_content, prompt)
             
@@ -166,7 +231,14 @@ class AIAnalysisService(LoggerMixin):
         
         Return as JSON with keys: summary, novelty, technicalInnovation
         """
-        
+
+        if self.fallback_mode:
+            return {
+                "summary": "This paper presents a novel approach to advancing AI research.",
+                "novelty": "Introduces new techniques for improved performance",
+                "technicalInnovation": "Advanced methodology with practical applications"
+            }
+
         try:
             response = await asyncio.to_thread(self.model.generate_content, prompt)
             
