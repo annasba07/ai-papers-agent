@@ -13,6 +13,8 @@ anthropic==0.18.1
 # HTTP and data processing
 feedparser==6.0.11
 httpx==0.27.0
+numpy==1.26.4
+sentence-transformers==2.7.0
 
 # Database (SQLAlchemy ORM and PostgreSQL)
 sqlalchemy==1.4.52

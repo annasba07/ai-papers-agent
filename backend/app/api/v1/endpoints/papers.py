@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 import json
 from app.services.arxiv_service import arxiv_service
 from app.services.ai_analysis_service import ai_analysis_service
+from app.services.local_atlas_service import local_atlas_service
 from app.schemas.paper import (
     PaperResponse,
     PaperSearchParams,
@@ -174,65 +175,61 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
     try:
         user_description = request.description.strip()
         fallback_mode = getattr(ai_analysis_service, "fallback_mode", False)
+        top_k = settings.CONTEXTUAL_SEARCH_TOP_K
+        max_days = settings.CONTEXTUAL_SEARCH_MAX_DAYS
 
-        # Step 1: Deconstruct user query to generate search keywords
-        if fallback_mode:
-            keywords = [
-                word.strip(".,;:").lower()
-                for word in user_description.split()
-                if len(word.strip(".,;:")) > 3
-            ]
-            search_query = " ".join(keywords[:6]) or user_description[:100]
-        else:
-            deconstruct_prompt = f"""Analyze the following user project description and extract the key information needed to find relevant academic papers.
-            Identify the main problem, the domain, and any specific technologies or methodologies mentioned.
+        def _trim(text: str, limit: int = 600) -> str:
+            text = (text or "").strip()
+            if len(text) > limit:
+                return text[:limit].rstrip() + "…"
+            return text
 
-            User Description: "{user_description}"
+        # Step 1: Retrieve candidates from the local atlas (semantic search + recency weighting)
+        papers = local_atlas_service.search(
+            user_description,
+            top_k=top_k,
+            max_age_days=max_days,
+        )
 
-            Return a JSON object with the following keys: "problem", "domain", "technologies", "search_query".
-            The 'search_query' should be a concise string of 3-5 keywords suitable for a semantic search on arXiv."""
+        used_fallback = False
 
-            try:
-                deconstruct_response = await ai_analysis_service.model.generate_content_async(deconstruct_prompt)
-                deconstructed_info = json.loads(
-                    deconstruct_response.text.replace("```json", "").replace("```", "").strip()
-                )
-                search_query = deconstructed_info.get("search_query", "")
-            except Exception:
-                search_query = user_description[:100]
+        if not papers:
+            # Lightweight lexical fallback on the atlas
+            papers = local_atlas_service.recent_papers(limit=top_k)
 
-        if not search_query:
-            raise HTTPException(
-                status_code=400,
-                detail="Could not generate a search query from the description"
-            )
-
-        # Step 2: Search arXiv with the generated query
-        papers = await arxiv_service.search_papers(search_query, max_results=10)
+        if not papers:
+            used_fallback = True
+            papers = await arxiv_service.search_papers(user_description[:120], max_results=top_k)
 
         if not papers:
             return ContextualSearchResponse(
                 analysis="No relevant papers found for your project description.",
-                papers=[]
+                papers=[],
             )
 
-        # Step 3: Format papers for analysis
-        papers_for_response = []
-        papers_formatted = []
+        # Step 2: Normalize papers for downstream synthesis
+        papers_for_response: List[Dict[str, str]] = []
+        papers_formatted: List[str] = []
 
         for paper in papers:
-            papers_for_response.append({
-                "id": paper.get('link', ''),
-                "title": paper.get('title', ''),
-                "summary": paper.get('summary', '')
-            })
+            title = paper.get("title", "").strip()
+            summary = paper.get("abstract") or paper.get("summary") or ""
+            link = paper.get("link") or f"http://arxiv.org/abs/{paper.get('id', '')}"
+
+            papers_for_response.append(
+                {
+                    "id": link or paper.get("id", ""),
+                    "title": title,
+                    "summary": summary,
+                }
+            )
             papers_formatted.append(
-                f"- Title: {paper.get('title', '')}\n  Summary: {paper.get('summary', '')}"
+                f"- Title: {title}\n  Summary: {_trim(summary)}"
             )
 
         papers_text = "\n".join(papers_formatted)
 
-        # Step 4: Generate synthesis and recommendations
+        # Step 3: Generate synthesis and recommendations
         synthesis_prompt = f"""You are an expert AI research assistant. A user has described a project they are working on.
         Based on their goal and a list of relevant research papers, your task is to synthesize the information and provide actionable advice.
 
@@ -281,6 +278,12 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                     "Here is a quick brief of promising papers:\n"
                     f"{bullet_points}"
                 )
+
+        if used_fallback and not fallback_mode:
+            analysis_text = (
+                analysis_text
+                + "\n\n_Note: pulled from live arXiv due to no local atlas match._"
+            )
 
         return ContextualSearchResponse(
             analysis=analysis_text,

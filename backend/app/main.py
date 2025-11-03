@@ -1,10 +1,13 @@
 """
 FastAPI application entry point with clean service architecture
 """
-from fastapi import FastAPI
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.api import api_router
+from app.services.local_atlas_service import local_atlas_service
 
 
 def create_application() -> FastAPI:
@@ -54,34 +57,67 @@ async def get_papers_compat(
     category: str = "all",
     query: str = ""
 ):
-    """Frontend-compatible papers endpoint"""
+    """Frontend-compatible papers endpoint."""
     from app.services.arxiv_service import arxiv_service
-    from app.services.ai_analysis_service import ai_analysis_service
 
     try:
-        # Determine which type of search to perform
-        if query:
-            # Search by query
-            papers = await arxiv_service.search_papers(query, max_results=20)
-        elif category and category != "all":
-            # Search by category
-            papers = await arxiv_service.get_recent_papers(category, max_results=20)
+        limit = min(20, settings.MAX_PAPERS_PER_BATCH)
+
+        def _parse_days(value: str) -> Optional[int]:
+            try:
+                parsed = int(value)
+                return parsed if parsed > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        days_int = _parse_days(days)
+        category_filter = None if category in (None, "", "all") else category
+
+        # Prefer local atlas results when available
+        if local_atlas_service.enabled:
+            if query.strip():
+                papers = local_atlas_service.search(
+                    query,
+                    top_k=limit,
+                    category=category_filter,
+                    max_age_days=days_int,
+                )
+            else:
+                papers = local_atlas_service.recent_papers(
+                    limit=limit,
+                    category=category_filter,
+                    days=days_int,
+                )
+
+            if papers:
+                sanitized = [
+                    {
+                        "id": paper.get("id"),
+                        "title": paper.get("title"),
+                        "abstract": paper.get("abstract"),
+                        "authors": paper.get("authors"),
+                        "published": paper.get("published"),
+                        "category": paper.get("category"),
+                        "link": paper.get("link"),
+                        "window_start": paper.get("window_start"),
+                        "window_end": paper.get("window_end"),
+                    }
+                    for paper in papers[:limit]
+                ]
+                return {"papers": sanitized}
+
+        # Fallback to live arXiv search when there are no atlas results
+        if query.strip():
+            papers = await arxiv_service.search_papers(query, max_results=limit)
+        elif category_filter:
+            papers = await arxiv_service.get_recent_papers(category_filter, max_results=limit)
         else:
-            # Get recent AI papers by default
-            papers = await arxiv_service.get_recent_papers("cs.AI", max_results=20)
+            papers = await arxiv_service.get_recent_papers("cs.AI", max_results=limit)
 
-        # Enhance with AI analysis
-        if papers:
-            batch_size = min(len(papers), settings.MAX_PAPERS_PER_BATCH)
-            papers_to_analyze = papers[:batch_size]
-            analyzed_papers = await ai_analysis_service.batch_generate_summaries(papers_to_analyze)
-            return analyzed_papers
+        return {"papers": papers or []}
 
-        return []
-
-    except Exception as e:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=f"Failed to fetch papers: {str(e)}")
+    except Exception as exc:  # pragma: no cover - defensive guard
+        raise HTTPException(status_code=500, detail=f"Failed to fetch papers: {str(exc)}")
 
 
 @app.post("/papers/contextual-search")
