@@ -19,41 +19,68 @@ class ArxivService(LoggerMixin):
         self.max_results = settings.ARXIV_MAX_RESULTS
         self.log_info("arXiv service initialized")
     
-    async def search_papers(self, query: str, max_results: int = None) -> List[Dict[str, Any]]:
-        """Search for papers on arXiv"""
-        if max_results is None:
-            max_results = self.max_results
-        
-        # Construct search URL with properly encoded query
+    async def search_papers(self, query: str, max_results: int | None = None) -> List[Dict[str, Any]]:
+        """Search for papers on arXiv, supporting pagination for large result sets."""
+        target_total = max_results if (max_results and max_results > 0) else None
+        batch_size = self.max_results
         encoded_query = quote_plus(query)
-        search_url = f"{self.base_url}?search_query={encoded_query}&start=0&max_results={max_results}&sortBy=submittedDate&sortOrder=descending"
-        
-        self.log_info("Searching arXiv papers", query=query, max_results=max_results)
-        
+
+        collected: List[Dict[str, Any]] = []
+        start = 0
+
+        self.log_info("Searching arXiv papers", query=query, max_results=target_total)
+
         try:
-            # Use asyncio to make the request non-blocking
-            feed = await asyncio.to_thread(feedparser.parse, search_url)
-            
-            if not feed.entries:
-                self.log_warning("No papers found for query", query=query)
-                return []
-            
-            papers = []
-            for entry in feed.entries:
-                paper = {
-                    'id': entry.id.split('/')[-1],  # Extract arXiv ID
-                    'title': entry.title,
-                    'authors': [author.name for author in entry.authors],
-                    'summary': entry.summary,
-                    'published': datetime.strptime(entry.published, '%Y-%m-%dT%H:%M:%SZ'),
-                    'link': entry.link,
-                    'category': entry.tags[0].term if entry.tags else 'Unknown'
-                }
-                papers.append(paper)
-            
-            self.log_info("Successfully retrieved papers", found_papers=len(papers), query=query)
-            return papers
-            
+            while True:
+                if target_total is not None and len(collected) >= target_total:
+                    break
+
+                remaining = None if target_total is None else target_total - len(collected)
+                current_batch = batch_size if remaining is None else min(batch_size, remaining)
+
+                search_url = (
+                    f"{self.base_url}?search_query={encoded_query}&start={start}"
+                    f"&max_results={current_batch}&sortBy=submittedDate&sortOrder=descending"
+                )
+
+                feed = await asyncio.to_thread(feedparser.parse, search_url)
+                entries = feed.entries or []
+
+                if not entries:
+                    if start == 0:
+                        self.log_warning("No papers found for query", query=query)
+                    break
+
+                for entry in entries:
+                    collected.append(
+                        {
+                            "id": entry.id.split("/")[-1],
+                            "title": entry.title,
+                            "authors": [author.name for author in entry.authors],
+                            "summary": entry.summary,
+                            "published": datetime.strptime(entry.published, "%Y-%m-%dT%H:%M:%SZ"),
+                            "link": entry.link,
+                            "category": entry.tags[0].term if entry.tags else "Unknown",
+                        }
+                    )
+
+                self.log_debug(
+                    "Fetched arXiv batch",
+                    query=query,
+                    batch_size=len(entries),
+                    start=start,
+                    collected=len(collected),
+                )
+
+                if len(entries) < current_batch:
+                    # No more results beyond this point
+                    break
+
+                start += current_batch
+
+            self.log_info("Successfully retrieved papers", found_papers=len(collected), query=query)
+            return collected
+
         except Exception as e:
             self.log_error("arXiv search failed", error=e, query=query)
             raise ArxivAPIException(f"arXiv search failed: {str(e)}", error_code="ARXIV_SEARCH_ERROR")

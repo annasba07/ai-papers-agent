@@ -134,6 +134,10 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
 Frontend (`.env.local`):
 
 ```bash
+# Optional: used by the Next.js proxy to reach FastAPI
+RESEARCH_API_BASE_URL=http://localhost:8000
+
+# (legacy) expose backend URL directly to the browser if needed
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
@@ -196,6 +200,70 @@ All stages run in parallel for optimal performance with smart fallback handling.
 5. Returns ranked papers with implementation guidance
 
 ## Development
+
+### Precomputing Embeddings
+
+Use the embedding CLI to cache vectors so the backend can load them instantly:
+
+```bash
+cd backend
+source ../venv-py311/bin/activate
+python -m app.cli.generate_embeddings \
+  --catalog ../data/derived_12mo/papers_catalog.ndjson \
+  --output ../embeddings \
+  --model specter2
+```
+
+Additional baselines:
+
+- **Voyage AI** (commercial). Set `VOYAGE_API_KEY` (or pass `--voyage-api-key`) and run:
+  ```bash
+  python -m app.cli.generate_embeddings \
+    --model voyage --voyage-model voyage-3.5 \
+    --batch-size 16 --voyage-sleep 1.0 --voyage-dimension 1024
+  ```
+  The CLI uses the official `voyageai` SDK (see `backend/requirements.txt`) so it will automatically retry on transient errors. Adjust `--voyage-sleep` and `--batch-size` if you hit rate limits.
+- **Qwen3 (self-hosted)**. Deploy HuggingFace Text-Embeddings-Inference for `Qwen/Qwen3-Embedding-8B`, expose its `/v1/embeddings` URL, then run:
+  ```bash
+  python -m app.cli.generate_embeddings ... --model qwen \
+    --qwen-endpoint https://<your-tei-host>/v1/embeddings
+  ```
+  Provide `--qwen-api-key` if your TEI endpoint requires auth.
+
+Each run writes `<label>_embeddings.npy` + `<label>_ids.json` into `embeddings/`. Set `ATLAS_EMBED_CACHE_LABEL` in `backend/.env` to the label you want (e.g., `specter2`, `voyage_voyage-3_5`, `qwen_Qwen3-Embedding-8B`) and restart FastAPI to switch models.
+
+### Multimodal (PDF Page) Pipeline
+
+1. **Download PDFs from arXiv** (optional limit for testing):
+   ```bash
+   cd backend
+   python -m app.cli.download_pdfs \
+     --catalog ../data/derived_12mo/papers_catalog.ndjson \
+     --output-root ../data/papers_pdf \
+     --rate-limit 0.5
+   ```
+   Adjust `--rate-limit` to stay polite with arXiv; use `--limit` to download a subset.
+2. **Render PDFs to images** (expects PDFs under `data/papers_pdf/`):
+   ```bash
+   cd backend
+   python -m app.cli.render_pdf_pages \
+     --catalog ../data/derived_12mo/papers_catalog.ndjson \
+     --pdf-root ../data/papers_pdf \
+     --output-root ../data/rendered_pages \
+     --dpi 144
+   ```
+   This writes PNGs per page plus `render_manifest.jsonl`.
+3. **Generate multimodal embeddings (Nomic single-vector)**:
+   ```bash
+   python -m app.cli.embed_pages_nomic \
+     --images-root ../data/rendered_pages \
+     --output ../embeddings \
+     --model-id nomic-ai/nomic-embed-multimodal-v1.5 \
+     --device cuda \
+     --batch-size 8
+   ```
+   Requires a GPU with sufficient VRAM. The script emits `nomic_multimodal_embeddings.npy` and `_ids.json`.
+4. **Fuse search results**: load the multimodal cache in a parallel index (work in progress) and blend with the text embeddings via reciprocal-rank fusion / reranking. This enables figure/equation retrieval without relying solely on OCR.
 
 ### Adding New Features
 

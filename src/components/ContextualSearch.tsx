@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ProgressIndicator from './ProgressIndicator';
 
 interface SearchResult {
@@ -18,20 +18,37 @@ const searchSteps = [
 ];
 
 const ContextualSearch = () => {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   const [description, setDescription] = useState('');
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backendReady, setBackendReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const response = await fetch('/api/contextual-search');
+        if (!response.ok) {
+          throw new Error('CONFIG');
+        }
+        const data = (await response.json()) as { enabled: boolean };
+        setBackendReady(data.enabled);
+      } catch {
+        setBackendReady(false);
+      }
+    };
+
+    checkBackend();
+  }, []);
 
   const handleSearch = async () => {
     if (!description.trim()) {
       return;
     }
-    if (!API_BASE_URL) {
-      setError('Configure NEXT_PUBLIC_API_BASE_URL to use contextual analysis or start the FastAPI backend.');
+    if (backendReady === false) {
+      setError('Contextual analysis backend is not available. Start the FastAPI server or set RESEARCH_API_BASE_URL.');
       return;
     }
 
@@ -51,7 +68,7 @@ const ContextualSearch = () => {
       await new Promise((resolve) => setTimeout(resolve, progressIntervals[1]));
 
       setCurrentStep(2);
-      const response = await fetch(`${API_BASE_URL}/papers/contextual-search`, {
+      const response = await fetch('/api/contextual-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description }),
@@ -70,7 +87,7 @@ const ContextualSearch = () => {
     } catch (err) {
       console.error('Failed to fetch contextual search results:', err);
       setError(
-        'Contextual analysis is currently unavailable. Start the backend API (`uvicorn app.main:app --reload`) or set NEXT_PUBLIC_API_BASE_URL to a running instance.'
+        'Contextual analysis is currently unavailable. Start the backend API (`uvicorn app.main:app --reload`) or configure RESEARCH_API_BASE_URL.'
       );
     } finally {
       setLoading(false);
@@ -99,7 +116,7 @@ const ContextualSearch = () => {
         <div className="contextual-search__actions">
           <button
             onClick={handleSearch}
-            disabled={loading || !API_BASE_URL}
+            disabled={loading || backendReady === false || backendReady === null}
             className="btn btn-primary contextual-search__submit"
             type="button"
           >
@@ -108,10 +125,10 @@ const ContextualSearch = () => {
         </div>
       </div>
 
-      {!API_BASE_URL && (
+      {backendReady === false && (
         <p className="contextual-search__tip">
           Tip: run <code>uvicorn app.main:app --reload</code> in <code>backend/</code> and set{' '}
-          <code>NEXT_PUBLIC_API_BASE_URL</code> to enable contextual insights.
+          <code>RESEARCH_API_BASE_URL</code> (or <code>NEXT_PUBLIC_API_BASE_URL</code>) in <code>.env.local</code> so the proxy can reach it.
         </p>
       )}
 

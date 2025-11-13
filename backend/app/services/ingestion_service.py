@@ -26,6 +26,7 @@ from app.services.providers import (
 )
 from app.services.providers.base import ProviderError
 from app.utils.logger import LoggerMixin
+from app.core.config import settings
 
 
 class IngestionService(LoggerMixin):
@@ -101,6 +102,112 @@ class IngestionService(LoggerMixin):
             current_start = next_start
 
         return windows
+
+    async def _fetch_papers_for_range(
+        self,
+        category: str,
+        start: datetime,
+        end: datetime,
+    ) -> List[Dict[str, Any]]:
+        query = (
+            f"cat:{category} AND submittedDate:["
+            f"{self._format_arxiv_datetime(start)} TO {self._format_arxiv_datetime(end)}]"
+        )
+
+        papers = await self.arxiv_service.search_papers(query, max_results=None)
+        threshold = settings.ARXIV_SPLIT_THRESHOLD or 0
+        min_days = settings.ARXIV_MIN_SPLIT_DAYS or 0
+        delta = end - start
+
+        if (
+            threshold
+            and len(papers) >= threshold
+            and delta.days >= min_days
+        ):
+            mid = start + delta / 2
+            mid = mid.replace(second=0, microsecond=0)
+            if mid <= start or mid >= end:
+                return papers
+
+            first_end = mid
+            second_start = mid + timedelta(minutes=1)
+
+            first_half = await self._fetch_papers_for_range(category, start, first_end)
+            second_half = await self._fetch_papers_for_range(category, second_start, end)
+
+            merged: Dict[str, Dict[str, Any]] = {}
+            for record in first_half + second_half:
+                merged[record["id"]] = record
+            return list(merged.values())
+
+        return papers
+
+    async def _ingest_window(
+        self,
+        category: str,
+        start: datetime,
+        end: datetime,
+        generate_embeddings: bool,
+        extract_concepts: bool,
+    ) -> Dict[str, Any]:
+        papers = await self._fetch_papers_for_range(category, start, end)
+        stats = {
+            "fetched": len(papers),
+            "stored": 0,
+            "duplicates": 0,
+            "embeddings_generated": 0,
+            "concepts_extracted": 0,
+            "errors": 0,
+            "dump_path": None,
+        }
+
+        if not papers:
+            return stats
+
+        storage_context = {
+            "category": category,
+            "window_start": start,
+            "window_end": end,
+        }
+
+        if self.use_local_dump:
+            dump_path, records = self._dump_to_local(papers, storage_context=storage_context)
+            stats["dump_path"] = str(dump_path)
+            stats["stored"] = len(records)
+        else:
+            store_result = await self._store_papers(papers, storage_context=storage_context)
+            stats.update({
+                "stored": store_result["stored"],
+                "duplicates": store_result["duplicates"],
+                "errors": store_result["errors"],
+            })
+            records = store_result["papers"]
+
+            if (
+                generate_embeddings
+                and stats["stored"] > 0
+                and self.embedding_service
+            ):
+                embedding_result = await self.embedding_service.embed_papers_batch(
+                    records,
+                    force_update=False,
+                )
+                stats["embeddings_generated"] = embedding_result
+            elif generate_embeddings and self.embedding_service is None:
+                self.log_warning("Embedding generation requested but service unavailable")
+
+            if (
+                extract_concepts
+                and stats["stored"] > 0
+                and not self.use_local_dump
+            ):
+                from app.services.concept_extraction_service import get_concept_extraction_service
+
+                concept_service = get_concept_extraction_service()
+                concept_result = await concept_service.extract_concepts_batch(records)
+                stats["concepts_extracted"] = concept_result["total_concepts"]
+
+        return stats
 
     async def ingest_papers(
         self,
@@ -504,11 +611,13 @@ class IngestionService(LoggerMixin):
             windows=total_windows
         )
 
+        effective_max = max_per_window if (max_per_window and max_per_window > 0) else None
+
         summary = {
             "categories": categories,
             "years": years,
             "window_months": window_months,
-            "max_per_window": max_per_window,
+            "max_per_window": effective_max,
             "total_windows": total_windows,
             "stats": [],
             "local_dump_dir": str(self.local_dump_dir) if self.local_dump_dir else None
@@ -540,17 +649,13 @@ class IngestionService(LoggerMixin):
                 )
 
                 try:
-                    stats = await self.ingest_papers(
-                        query=query,
-                        max_results=max_per_window,
+                    stats = await self._ingest_window(
+                        category=category,
+                        start=start,
+                        end=end,
                         generate_embeddings=generate_embeddings,
                         extract_concepts=extract_concepts,
-                        storage_context={
-                        "category": category,
-                        "window_start": start,
-                        "window_end": end
-                    }
-                )
+                    )
 
                     category_stats["windows_processed"] += 1
                     category_stats["fetched"] += stats["fetched"]

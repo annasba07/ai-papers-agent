@@ -2,7 +2,7 @@
 Application configuration management
 """
 import os
-from typing import Optional
+from typing import Optional, List
 from pydantic_settings import BaseSettings
 
 
@@ -33,7 +33,9 @@ class Settings(BaseSettings):
 
     # arXiv API Configuration
     ARXIV_API_BASE_URL: str = "http://export.arxiv.org/api/query"
-    ARXIV_MAX_RESULTS: int = 10
+    ARXIV_MAX_RESULTS: int = 500
+    ARXIV_SPLIT_THRESHOLD: int = 900
+    ARXIV_MIN_SPLIT_DAYS: int = 1
 
     # GitHub API Configuration (Optional - for code detection)
     GITHUB_TOKEN: Optional[str] = None  # Get from https://github.com/settings/tokens
@@ -42,11 +44,48 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
 
     # Atlas dataset configuration
-    ATLAS_DERIVED_DIR: str = "../data/derived"
-    ATLAS_EMBED_MODEL: Optional[str] = "sentence-transformers/all-MiniLM-L6-v2"
+    ATLAS_DERIVED_DIR: str = "../data/derived_12mo"
+    ATLAS_EMBED_MODEL: Optional[str] = "allenai/specter2"
     ATLAS_EMBED_BATCH_SIZE: int = 64
+    ATLAS_EMBED_CACHE_DIR: str = "../embeddings"
+    ATLAS_EMBED_CACHE_LABEL: Optional[str] = None
     CONTEXTUAL_SEARCH_TOP_K: int = 6
     CONTEXTUAL_SEARCH_MAX_DAYS: int = 1095  # ~3 years
+    DEFAULT_AI_CATEGORIES: List[str] = [
+        "cs.AI",
+        "cs.LG",
+        "cs.CV",
+        "cs.CL",
+        "cs.NE",
+        "cs.RO",
+        "cs.MM",
+        "cs.SE",
+        "cs.HC",
+        "cs.IR",
+        "cs.MA",
+        "cs.CY",
+        "cs.DB",
+        "cs.DM",
+        "cs.CE",
+        "cs.GR",
+        "cs.SI",
+        "stat.ML",
+        "stat.AP",
+        "stat.CO",
+        "eess.IV",
+        "eess.SP",
+        "physics.comp-ph",
+        "physics.data-an",
+        "q-bio.QM",
+        "q-bio.NC",
+    ]
+    RERANK_E5_MODEL: Optional[str] = "intfloat/e5-large-v2"
+    RERANK_E5_BATCH_SIZE: int = 16
+    RERANK_E5_PROMPT: str = "Instruct: Given a research goal, retrieve relevant scientific papers\nQuery: "
+    RERANK_E5_WEIGHT: float = 1.0
+    OPENAI_RERANK_MODEL: Optional[str] = "text-embedding-3-large"
+    OPENAI_RERANK_WEIGHT: float = 1.0
+    VOYAGE_API_KEY: Optional[str] = None
 
     @property
     def allowed_origins_list(self) -> list[str]:
