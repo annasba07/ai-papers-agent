@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 import json
 from app.services.arxiv_service import arxiv_service
 from app.services.ai_analysis_service import ai_analysis_service
+from app.services.rerank_service import get_rerank_service
 from app.services.local_atlas_service import local_atlas_service
 from app.schemas.paper import (
     PaperResponse,
@@ -209,8 +210,6 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
 
         # Step 2: Normalize papers for downstream synthesis
         papers_for_response: List[Dict[str, str]] = []
-        papers_formatted: List[str] = []
-
         for paper in papers:
             title = paper.get("title", "").strip()
             summary = paper.get("abstract") or paper.get("summary") or ""
@@ -223,10 +222,18 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                     "summary": summary,
                 }
             )
-            papers_formatted.append(
-                f"- Title: {title}\n  Summary: {_trim(summary)}"
-            )
 
+        rerank_service = get_rerank_service()
+        papers_for_response = rerank_service.rerank(
+            user_description,
+            papers_for_response,
+            top_k=top_k,
+        )
+
+        papers_formatted: List[str] = [
+            f"- Title: {item['title']}\n  Summary: {_trim(item.get('summary', ''))}"
+            for item in papers_for_response
+        ]
         papers_text = "\n".join(papers_formatted)
 
         # Step 3: Generate synthesis and recommendations

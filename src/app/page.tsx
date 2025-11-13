@@ -42,6 +42,26 @@ const mapAtlasPaperToPaper = (paper: AtlasPaper): Paper => {
   };
 };
 
+const FloatingNav = () => (
+  <nav className="floating-nav" aria-label="Atlas navigation">
+    <span className="floating-nav__title">Jump to</span>
+    <ul className="floating-nav__list">
+      <li>
+        <a href="#top">Overview</a>
+      </li>
+      <li>
+        <a href="#roadmap">Playbook</a>
+      </li>
+      <li>
+        <a href="#contextual-search">Contextual AI</a>
+      </li>
+      <li>
+        <a href="#atlas-feed">Atlas Feed</a>
+      </li>
+    </ul>
+  </nav>
+);
+
 export default function Home() {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -219,8 +239,10 @@ export default function Home() {
   }, [atlasSummary, latestHighlightLag]);
 
   return (
-    <main className="page-shell">
-      <section className="hero">
+    <>
+      <FloatingNav />
+      <main className="page-shell">
+        <section id="top" className="hero">
         <div className="hero__content">
           <span className="hero__chip">Living Research Atlas</span>
           <h1>See where AI research is moving—and act on it fast.</h1>
@@ -288,19 +310,23 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="contextual-search" className="contextual-shell">
-        <ContextualSearch />
+      <section id="contextual-search" className="contextual-section" aria-label="Contextual research console">
+        <div className="contextual-shell">
+          <ContextualSearch />
+        </div>
       </section>
 
-      <AtlasOverview
-        summary={atlasSummary}
-        papers={atlasHighlights}
-        loadingSummary={atlasSummaryLoading}
-        loadingPapers={atlasHighlightsLoading}
-        error={atlasError}
-      />
+      <section aria-label="Atlas snapshot" className="atlas-section">
+        <AtlasOverview
+          summary={atlasSummary}
+          papers={atlasHighlights}
+          loadingSummary={atlasSummaryLoading}
+          loadingPapers={atlasHighlightsLoading}
+          error={atlasError}
+        />
+      </section>
 
-      <section className="paper-discovery" aria-labelledby="discover-heading">
+      <section id="atlas-feed" className="paper-discovery" aria-labelledby="discover-heading">
         <header>
           <span className="eyebrow">Atlas feed</span>
           <h2 id="discover-heading" className="section-title">
@@ -345,6 +371,7 @@ export default function Home() {
         )}
       </section>
     </main>
+    </>
   );
 }
 

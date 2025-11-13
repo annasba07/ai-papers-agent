@@ -25,6 +25,7 @@ from app.db.database import database
 from app.services.ingestion_service import get_ingestion_service
 from app.services.embedding_service import get_embedding_service
 from app.services.concept_extraction_service import get_concept_extraction_service
+from app.core.config import settings
 
 
 def print_header(text: str):
@@ -293,11 +294,11 @@ Examples:
     # Options
     parser.add_argument("--max", type=int, default=100, help="Maximum papers to fetch (default: 100)")
     parser.add_argument("--max-per", type=int, default=50, help="Max papers per category for --recent mode")
-    parser.add_argument("--categories", nargs="+", default=["cs.AI", "cs.LG", "cs.CV"],
+    parser.add_argument("--categories", nargs="+", default=settings.DEFAULT_AI_CATEGORIES,
                        help="Categories for --recent mode (default: cs.AI cs.LG cs.CV)")
     parser.add_argument("--years", type=int, default=3, help="Number of years for --bootstrap-atlas (default: 3)")
     parser.add_argument("--window-months", type=int, default=3, help="Months per window for --bootstrap-atlas (default: 3)")
-    parser.add_argument("--max-window", type=int, default=200, help="Max papers per window for --bootstrap-atlas (default: 200)")
+    parser.add_argument("--max-window", type=int, default=0, help="Max papers per window for --bootstrap-atlas (0 = no limit, default: 0)")
     parser.add_argument("--dump-dir", help="Write raw paper dumps to this directory (local bootstrap mode)")
 
     # Processing flags
