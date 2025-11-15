@@ -42,6 +42,7 @@ export async function GET() {
       stats,
       topCategories,
       topAuthors,
+      timeline,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
