@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import ProgressIndicator from './ProgressIndicator';
 
+interface EmbeddingCache {
+  label: string;
+  paper_count: number;
+  active: boolean;
+}
+
 interface SearchResult {
   analysis: string;
   papers: {
@@ -25,6 +31,8 @@ const ContextualSearch = () => {
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [backendReady, setBackendReady] = useState<boolean | null>(null);
+  const [embeddingOptions, setEmbeddingOptions] = useState<EmbeddingCache[]>([]);
+  const [embeddingLabel, setEmbeddingLabel] = useState<string>('');
 
   useEffect(() => {
     const checkBackend = async () => {
@@ -41,6 +49,31 @@ const ContextualSearch = () => {
     };
 
     checkBackend();
+  }, []);
+
+  useEffect(() => {
+    const fetchCaches = async () => {
+      try {
+        const response = await fetch('/api/atlas/embedding-caches');
+        if (!response.ok) {
+          throw new Error('Failed to fetch caches');
+        }
+        const caches = (await response.json()) as EmbeddingCache[];
+        setEmbeddingOptions(caches);
+        const active = caches.find((cache) => cache.active);
+        if (active) {
+          setEmbeddingLabel(active.label);
+        } else if (caches.length > 0 && !embeddingLabel) {
+          setEmbeddingLabel(caches[0].label);
+        }
+      } catch (error) {
+        console.error('Failed to load embedding caches', error);
+        setEmbeddingOptions([]);
+      }
+    };
+
+    fetchCaches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSearch = async () => {
@@ -68,10 +101,14 @@ const ContextualSearch = () => {
       await new Promise((resolve) => setTimeout(resolve, progressIntervals[1]));
 
       setCurrentStep(2);
+      const payload: Record<string, unknown> = { description };
+      if (embeddingLabel) {
+        payload.embedding_label = embeddingLabel;
+      }
       const response = await fetch('/api/contextual-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -106,6 +143,23 @@ const ContextualSearch = () => {
       {error && <div className="alert alert--error contextual-search__alert">{error}</div>}
 
       <div className="contextual-search__form">
+        {embeddingOptions.length > 0 && (
+          <div className="contextual-search__selector">
+            <label htmlFor="embedding-label">Embedding Model</label>
+            <select
+              id="embedding-label"
+              className="form-control contextual-search__select"
+              value={embeddingLabel}
+              onChange={(event) => setEmbeddingLabel(event.target.value)}
+            >
+              {embeddingOptions.map((option) => (
+                <option key={option.label} value={option.label}>
+                  {option.label.replaceAll('_', ' ')} ({option.paper_count} papers)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <textarea
           value={description}
           onChange={(event) => setDescription(event.target.value)}

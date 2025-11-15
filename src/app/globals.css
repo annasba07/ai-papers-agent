@@ -444,6 +444,16 @@ code {
   gap: 16px;
 }
 
+.contextual-search__selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.contextual-search__select {
+  max-width: 20rem;
+}
+
 .contextual-search__actions {
   display: flex;
   flex-wrap: wrap;
