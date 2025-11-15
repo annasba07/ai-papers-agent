@@ -27,6 +27,9 @@ class LocalAtlasService(LoggerMixin):
         self._encoder_type: str = "sentence-transformers"
         self._record_ids: List[Optional[str]] = []
         self._active_cache_label: Optional[str] = None
+        self._stats: Dict[str, object] = {}
+        self._timeline: Dict[str, List[Dict[str, object]]] = {}
+        self._author_leaderboard: List[Dict[str, object]] = []
         self._default_cache_label: Optional[str] = (
             settings.ATLAS_EMBED_CACHE_LABEL.strip() if settings.ATLAS_EMBED_CACHE_LABEL else None
         )
@@ -62,6 +65,7 @@ class LocalAtlasService(LoggerMixin):
             self.log_warning("Atlas catalog is empty; search disabled")
             return
 
+        self._load_summary_files(atlas_path)
         self._record_ids = [record.get("id") for record in self._records]
         documents = [record["_search_text"] for record in self._records]
         cache_dir = Path(settings.ATLAS_EMBED_CACHE_DIR).expanduser().resolve()
@@ -348,6 +352,86 @@ class LocalAtlasService(LoggerMixin):
                 }
             )
         return caches
+
+    def _load_summary_files(self, atlas_path: Path) -> None:
+        stats_path = atlas_path / "build_stats.json"
+        timeline_path = atlas_path / "category_timeline.json"
+        authors_path = atlas_path / "author_leaderboard.json"
+        if stats_path.exists():
+            try:
+                self._stats = json.loads(stats_path.read_text(encoding="utf-8"))
+            except Exception:
+                self._stats = {}
+        if timeline_path.exists():
+            try:
+                self._timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+            except Exception:
+                self._timeline = {}
+        if authors_path.exists():
+            try:
+                self._author_leaderboard = json.loads(authors_path.read_text(encoding="utf-8"))
+            except Exception:
+                self._author_leaderboard = []
+
+    def list_papers(
+        self,
+        *,
+        limit: int = 40,
+        category: Optional[str] = None,
+        days: Optional[int] = None,
+        query: Optional[str] = None,
+    ) -> List[Dict[str, object]]:
+        lowered = query.lower().strip() if query else ""
+        cutoff = None
+        if days and days > 0:
+            cutoff = datetime.utcnow() - timedelta(days=days)
+        items: List[Dict[str, object]] = []
+        for record in self._records:
+            if category and category != "all" and record.get("category") != category:
+                continue
+            published_dt = record.get("_published_dt")
+            if cutoff and published_dt and published_dt < cutoff:
+                continue
+            if lowered and lowered not in record.get("_search_text", ""):
+                continue
+            items.append(record)
+        items.sort(key=lambda rec: rec.get("_published_dt") or datetime.min, reverse=True)
+        sanitized = [
+            {
+                "id": rec.get("id"),
+                "title": rec.get("title"),
+                "abstract": rec.get("abstract"),
+                "authors": rec.get("authors"),
+                "published": rec.get("published"),
+                "category": rec.get("category"),
+                "link": rec.get("link"),
+            }
+            for rec in items[:limit]
+        ]
+        return sanitized
+
+    def get_summary(self) -> Dict[str, object]:
+        top_categories: List[Dict[str, object]] = []
+        if self._timeline:
+            top_categories = (
+                sorted(
+                    (
+                        {
+                            "category": category,
+                            "total": sum(point.get("count", 0) for point in points),
+                        }
+                        for category, points in self._timeline.items()
+                    ),
+                    key=lambda item: item["total"],
+                    reverse=True,
+                )[:10]
+            )
+        return {
+            "stats": self._stats,
+            "topCategories": top_categories,
+            "topAuthors": self._author_leaderboard[:15],
+            "timeline": self._timeline,
+        }
 
 
 class Specter2Encoder:

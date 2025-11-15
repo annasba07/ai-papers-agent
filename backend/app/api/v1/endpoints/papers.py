@@ -26,6 +26,31 @@ async def list_embedding_caches():
     return local_atlas_service.list_embedding_caches()
 
 
+@router.get("/atlas/papers")
+async def atlas_papers(
+    limit: int = Query(40, ge=1, le=200),
+    category: str = Query("all"),
+    days: int = Query(0, ge=0),
+    query: str = Query(""),
+):
+    if not local_atlas_service.enabled:
+        raise HTTPException(status_code=503, detail="Atlas dataset is not loaded")
+    papers = local_atlas_service.list_papers(
+        limit=limit,
+        category=category,
+        days=days if days > 0 else None,
+        query=query,
+    )
+    return {"papers": papers}
+
+
+@router.get("/atlas/summary")
+async def atlas_summary():
+    if not local_atlas_service.enabled:
+        raise HTTPException(status_code=503, detail="Atlas dataset is not loaded")
+    return local_atlas_service.get_summary()
+
+
 @router.get("/search", response_model=List[Dict[str, Any]])
 async def search_papers(
     query: str = Query(..., description="Search query for papers"),
