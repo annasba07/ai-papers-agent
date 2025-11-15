@@ -107,14 +107,22 @@ class BatchAnalysisRequest(BaseModel):
         }
 
 
+class EmbeddingCacheInfo(BaseModel):
+    label: str
+    paper_count: int
+    active: bool = False
+
+
 class ContextualSearchRequest(BaseModel):
     """Schema for contextual search request"""
     description: str = Field(..., min_length=10, description="Project description to find relevant papers")
+    embedding_label: Optional[str] = Field(None, description="Optional embedding cache label to use")
 
     class Config:
         schema_extra = {
             "example": {
-                "description": "I am building a mobile app that identifies plant species from a photo taken by the user. I need to know the best models for high-accuracy, on-device image classification."
+                "description": "I am building a mobile app that identifies plant species from a photo taken by the user. I need to know the best models for high-accuracy, on-device image classification.",
+                "embedding_label": "specter2",
             }
         }
 

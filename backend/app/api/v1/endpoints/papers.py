@@ -14,11 +14,16 @@ from app.schemas.paper import (
     BatchAnalysisRequest,
     AIAnalysisSchema,
     ContextualSearchRequest,
-    ContextualSearchResponse
+    ContextualSearchResponse,
+    EmbeddingCacheInfo,
 )
 from app.core.config import settings
 
 router = APIRouter()
+
+@router.get("/embedding-caches", response_model=List[EmbeddingCacheInfo])
+async def list_embedding_caches():
+    return local_atlas_service.list_embedding_caches()
 
 
 @router.get("/search", response_model=List[Dict[str, Any]])
@@ -175,6 +180,7 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
     """
     try:
         user_description = request.description.strip()
+        embedding_label = (request.embedding_label or "").strip() or None
         fallback_mode = getattr(ai_analysis_service, "fallback_mode", False)
         top_k = settings.CONTEXTUAL_SEARCH_TOP_K
         max_days = settings.CONTEXTUAL_SEARCH_MAX_DAYS
@@ -186,11 +192,15 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             return text
 
         # Step 1: Retrieve candidates from the local atlas (semantic search + recency weighting)
-        papers = local_atlas_service.search(
-            user_description,
-            top_k=top_k,
-            max_age_days=max_days,
-        )
+        try:
+            papers = local_atlas_service.search(
+                user_description,
+                top_k=top_k,
+                max_age_days=max_days,
+                embedding_label=embedding_label,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
         used_fallback = False
 

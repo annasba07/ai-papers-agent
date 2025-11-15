@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import torch
@@ -26,6 +26,10 @@ class LocalAtlasService(LoggerMixin):
         self._encoder = None
         self._encoder_type: str = "sentence-transformers"
         self._record_ids: List[Optional[str]] = []
+        self._active_cache_label: Optional[str] = None
+        self._default_cache_label: Optional[str] = (
+            settings.ATLAS_EMBED_CACHE_LABEL.strip() if settings.ATLAS_EMBED_CACHE_LABEL else None
+        )
 
         atlas_path = Path(settings.ATLAS_DERIVED_DIR).expanduser().resolve()
         catalog_path = atlas_path / "papers_catalog.ndjson"
@@ -61,10 +65,11 @@ class LocalAtlasService(LoggerMixin):
         self._record_ids = [record.get("id") for record in self._records]
         documents = [record["_search_text"] for record in self._records]
         cache_dir = Path(settings.ATLAS_EMBED_CACHE_DIR).expanduser().resolve()
-
+        self._cache_dir = cache_dir
         try:
             model_name = settings.ATLAS_EMBED_MODEL or "sentence-transformers/all-MiniLM-L6-v2"
-            cached_embeddings = self._load_cached_embeddings(cache_dir, model_name)
+            self._model_name = model_name
+            cached_embeddings, label_used = self._load_cached_embeddings(cache_dir, model_name, self._default_cache_label)
 
             if model_name.startswith("allenai/specter2"):
                 self._encoder_type = "specter2"
@@ -93,6 +98,7 @@ class LocalAtlasService(LoggerMixin):
                     )
                 )
             self._embeddings = embeddings.astype(np.float32)
+            self._active_cache_label = label_used or self._default_cache_label
             self.enabled = True
             self.log_info(
                 "Local atlas semantic index ready",
@@ -156,6 +162,7 @@ class LocalAtlasService(LoggerMixin):
         top_k: int = 10,
         category: Optional[str] = None,
         max_age_days: Optional[int] = None,
+        embedding_label: Optional[str] = None,
     ) -> List[Dict]:
         """
         Return the most relevant atlas papers for a query.
@@ -168,6 +175,11 @@ class LocalAtlasService(LoggerMixin):
         """
         if not self.enabled or not query.strip():
             return []
+
+        label_requested = (embedding_label or "").strip() or None
+        if label_requested:
+            if not self.ensure_embedding_cache(label_requested):
+                raise ValueError(f"Unknown embedding cache '{label_requested}'.")
 
         query_lower = query.lower()
         scores = self._semantic_scores(query)
@@ -246,12 +258,19 @@ class LocalAtlasService(LoggerMixin):
         matches = sum(1 for token in query_tokens if token in document)
         return matches / len(query_tokens)
 
-    def _load_cached_embeddings(self, cache_dir: Path, model_name: str) -> Optional[np.ndarray]:
+    def _load_cached_embeddings(
+        self,
+        cache_dir: Path,
+        model_name: str,
+        preferred_label: Optional[str] = None,
+    ) -> Tuple[Optional[np.ndarray], Optional[str]]:
         if not cache_dir.exists():
-            return None
+            return None, None
 
         candidates: List[str] = []
-        if settings.ATLAS_EMBED_CACHE_LABEL:
+        if preferred_label:
+            candidates.append(preferred_label.strip())
+        elif settings.ATLAS_EMBED_CACHE_LABEL:
             candidates.append(settings.ATLAS_EMBED_CACHE_LABEL.strip())
 
         if model_name.startswith("allenai/specter2"):
@@ -293,8 +312,42 @@ class LocalAtlasService(LoggerMixin):
                 path=str(embeddings_path),
                 label=candidate,
             )
-            return embeddings
-        return None
+            return embeddings, candidate
+        return None, None
+
+    def ensure_embedding_cache(self, label: Optional[str]) -> bool:
+        normalized = (label or "").strip() or None
+        if normalized == self._active_cache_label:
+            return True
+        embeddings, used_label = self._load_cached_embeddings(self._cache_dir, self._model_name, normalized)
+        if embeddings is None:
+            return False
+        self._embeddings = embeddings.astype(np.float32)
+        self._active_cache_label = used_label or normalized
+        self.log_info("Switched atlas embedding cache", label=self._active_cache_label)
+        return True
+
+    def list_embedding_caches(self) -> List[Dict[str, object]]:
+        caches: List[Dict[str, object]] = []
+        if not self._cache_dir.exists():
+            return caches
+        for ids_path in sorted(self._cache_dir.glob("*_ids.json")):
+            label = ids_path.name.replace("_ids.json", "")
+            embeddings_path = self._cache_dir / f"{label}_embeddings.npy"
+            if not embeddings_path.exists():
+                continue
+            try:
+                ids = json.loads(ids_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            caches.append(
+                {
+                    "label": label,
+                    "paper_count": len(ids),
+                    "active": label == (self._active_cache_label or self._default_cache_label),
+                }
+            )
+        return caches
 
 
 class Specter2Encoder:
