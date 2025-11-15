@@ -15,6 +15,7 @@ type AtlasSummary = {
   stats?: { unique_papers: number; categories: string[]; input_files: number };
   topCategories?: Array<{ category: string; total: number }>;
   topAuthors?: Array<{ author: string; paper_count: number }>;
+  timeline?: Record<string, Array<{ month: string; count: number }>>;
 };
 
 type EmbeddingCache = {
@@ -49,6 +50,7 @@ export default function AtlasExplorePage() {
   const [category, setCategory] = useState<string>('all');
   const [days, setDays] = useState<number>(90);
   const [query, setQuery] = useState<string>('');
+  const [selectedTimelineCat, setSelectedTimelineCat] = useState<string>('');
 
   const availableCategories = useMemo(() => {
     if (summary?.topCategories?.length) {
@@ -80,6 +82,12 @@ export default function AtlasExplorePage() {
   }, []);
 
   useEffect(() => {
+    if (!selectedTimelineCat && summary?.topCategories?.length) {
+      setSelectedTimelineCat(summary.topCategories[0].category);
+    }
+  }, [selectedTimelineCat, summary]);
+
+  useEffect(() => {
     const loadPapers = async () => {
       setPapersLoading(true);
       try {
@@ -100,6 +108,28 @@ export default function AtlasExplorePage() {
     };
     loadPapers();
   }, [category, days, query]);
+
+  const latestTechniques = useMemo(() => {
+    return papers.slice(0, 12).map((p) => {
+      const summary = p.abstract || '';
+      const firstSentence = summary.split('. ').slice(0, 2).join('. ').trim();
+      return {
+        id: p.id || '',
+        title: p.title || '',
+        summary: firstSentence || summary.slice(0, 160),
+        link: p.link || `http://arxiv.org/abs/${p.id || ''}`,
+        category: p.category || '',
+        published: p.published,
+      };
+    });
+  }, [papers]);
+
+  const timelineSeries = useMemo(() => {
+    if (!summary?.timeline) return [];
+    const key = selectedTimelineCat || (summary.topCategories && summary.topCategories[0]?.category) || '';
+    if (!key || !summary.timeline[key]) return [];
+    return summary.timeline[key].slice(-12); // last 12 months
+  }, [summary, selectedTimelineCat]);
 
   const handleContextualSearch = async () => {
     if (!contextDescription.trim()) return;
@@ -242,6 +272,33 @@ export default function AtlasExplorePage() {
               </div>
             ))}
           </div>
+          <div className="timeline-block">
+            <div className="timeline-header">
+              <h4>Trend</h4>
+              <select
+                value={selectedTimelineCat}
+                onChange={(e) => setSelectedTimelineCat(e.target.value)}
+                className="timeline-select"
+              >
+                {(summary?.topCategories || []).map((cat) => (
+                  <option key={cat.category} value={cat.category}>
+                    {cat.category}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {timelineSeries.length > 0 ? (
+              <div className="sparkline">
+                {timelineSeries.map((point) => (
+                  <div key={point.month} className="spark-bar" style={{ height: `${Math.min(point.count, 80)}px` }}>
+                    <span className="spark-label">{point.count}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No timeline available.</p>
+            )}
+          </div>
           <h3>Highlights</h3>
           {papersLoading ? (
             <div className="muted">Loading papers…</div>
@@ -262,6 +319,22 @@ export default function AtlasExplorePage() {
               ))}
             </div>
           )}
+          <h3>Latest Techniques</h3>
+          <div className="paper-grid">
+            {latestTechniques.map((paper, idx) => (
+              <a
+                key={`${paper.id}-${idx}`}
+                className="highlight-card"
+                href={paper.link}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <div className="badge">{paper.category || 'AI'}</div>
+                <h4>{paper.title}</h4>
+                <p>{paper.summary}{paper.summary && !paper.summary.endsWith('…') ? '…' : ''}</p>
+              </a>
+            ))}
+          </div>
         </div>
       </section>
     </main>
