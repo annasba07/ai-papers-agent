@@ -5,6 +5,11 @@ import type { AtlasPaper } from '@/types/Atlas';
 
 const atlasDir = process.env.ATLAS_DATA_DIR || path.join(process.cwd(), 'data', 'derived');
 const catalogPath = path.join(atlasDir, 'papers_catalog.ndjson');
+const rawBase =
+  process.env.RESEARCH_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  '';
+const backendBase = rawBase.replace(/\/$/, '');
 
 function matchesQuery(paper: AtlasPaper, query: string) {
   const lower = query.toLowerCase();
@@ -23,8 +28,23 @@ function matchesDays(paper: AtlasPaper, days: number) {
 }
 
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  if (backendBase) {
+    try {
+      const params = searchParams.toString();
+      const response = await fetch(`${backendBase}/papers/atlas/papers?${params}`);
+      const payload = await response.json();
+      return NextResponse.json(payload, { status: response.status });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return NextResponse.json(
+        { error: `Failed to fetch atlas papers: ${message}` },
+        { status: 502 },
+      );
+    }
+  }
+
   try {
-    const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '40', 10), 500);
     const query = searchParams.get('query')?.trim() || '';
     const category = searchParams.get('category')?.trim() || 'all';
