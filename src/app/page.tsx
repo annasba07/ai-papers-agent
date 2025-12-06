@@ -42,22 +42,13 @@ const mapAtlasPaperToPaper = (paper: AtlasPaper): Paper => {
   };
 };
 
-const FloatingNav = () => (
-  <nav className="floating-nav" aria-label="Atlas navigation">
-    <span className="floating-nav__title">Jump to</span>
-    <ul className="floating-nav__list">
-      <li>
-        <a href="#top">Overview</a>
-      </li>
-      <li>
-        <a href="#roadmap">Playbook</a>
-      </li>
-      <li>
-        <a href="#contextual-search">Contextual AI</a>
-      </li>
-      <li>
-        <a href="#atlas-feed">Atlas Feed</a>
-      </li>
+const SectionNav = () => (
+  <nav className="section-nav" aria-label="Page sections">
+    <ul className="section-nav__list">
+      <li><a href="#top">Overview</a></li>
+      <li><a href="#roadmap">Playbook</a></li>
+      <li><a href="#contextual-search">Assistant</a></li>
+      <li><a href="#atlas-feed">Feed</a></li>
     </ul>
   </nav>
 );
@@ -240,7 +231,7 @@ export default function Home() {
 
   return (
     <>
-      <FloatingNav />
+      <SectionNav />
       <main className="page-shell">
         <section id="top" className="hero">
         <div className="hero__content">
