@@ -1,7 +1,8 @@
 """
 Database initialization script for Supabase PostgreSQL
 
-Creates all tables, indexes, and triggers for the knowledge graph.
+Creates all tables, indexes, and triggers for the knowledge graph
+and agent memory system.
 
 Usage:
     python -m app.db.init_db
@@ -11,6 +12,14 @@ import os
 from sqlalchemy import text
 from app.db.database import database, engine
 from app.db.models import Base
+# Import agent memory models to register them with Base
+from app.db.agent_memory_models import (
+    AgentMemoryNode,
+    AgentReflection,
+    AgentPerformanceMetric,
+    AgentLearningPattern,
+    AgentSession
+)
 
 
 # SQL for pgvector extension and triggers
@@ -223,7 +232,11 @@ async def verify_setup():
             return False
 
         # Check tables
-        tables = ['papers', 'concepts', 'paper_concepts', 'citations', 'benchmarks']
+        tables = [
+            'papers', 'concepts', 'paper_concepts', 'citations', 'benchmarks',
+            'agent_memory_nodes', 'agent_reflections', 'agent_performance_metrics',
+            'agent_learning_patterns', 'agent_sessions'
+        ]
         for table in tables:
             result = await database.fetch_one(
                 text(f"SELECT COUNT(*) as count FROM {table}")
