@@ -3,6 +3,7 @@ import { Paper } from '../types/Paper';
 import PaperDetailModal from './PaperDetailModal';
 import SmartBadges from './SmartBadges';
 import CodeRepositories from './CodeRepositories';
+import CitationBadge from './CitationBadge';
 
 interface PaperListProps {
   papers: Paper[];
@@ -63,6 +64,12 @@ const PaperList: React.FC<PaperListProps> = ({ papers }) => {
           {paper.aiSummary.codeAvailability && (
             <CodeRepositories codeAvailability={paper.aiSummary.codeAvailability} />
           )}
+
+          {/* Citation Data */}
+          <CitationBadge
+            paperId={paper.id}
+            citations={paper.citations}
+          />
 
           <details style={{ marginBottom: '24px' }}>
             <summary style={{ cursor: 'pointer', color: 'var(--accent-blue)', fontSize: '14px' }}>View AI Summary & Original Abstract</summary>

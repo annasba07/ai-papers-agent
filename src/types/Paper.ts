@@ -16,6 +16,13 @@ export interface CodeAvailability {
   totalRepos: number;
 }
 
+export interface CitationData {
+  cited_by_count: number;
+  references_count: number;
+  openalex_id?: string;
+  concepts?: Array<{ name: string; score: number }>;
+}
+
 export interface Paper {
   id: string;
   title: string;
@@ -44,4 +51,5 @@ export interface Paper {
     codeAvailability?: CodeAvailability;
   };
   link: string;
+  citations?: CitationData;
 }
