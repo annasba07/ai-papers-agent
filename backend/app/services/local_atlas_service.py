@@ -251,6 +251,112 @@ class LocalAtlasService(LoggerMixin):
         )
         return filtered[:limit]
 
+    def find_similar(
+        self,
+        paper_id: str,
+        *,
+        top_k: int = 10,
+        category: Optional[str] = None,
+        exclude_same_authors: bool = False,
+    ) -> List[Dict]:
+        """
+        Find papers similar to a given paper using embedding similarity.
+
+        Args:
+            paper_id: The ID of the paper to find similar papers for.
+            top_k: Maximum number of similar papers to return.
+            category: Optional arXiv category filter.
+            exclude_same_authors: If True, exclude papers by the same authors.
+
+        Returns:
+            List of similar papers with similarity scores.
+        """
+        if not self.enabled or self._embeddings is None:
+            return []
+
+        # Normalize paper_id (remove version suffix if present)
+        base_id = paper_id.split("v")[0] if "v" in paper_id else paper_id
+
+        # Find the paper's index
+        paper_idx: Optional[int] = None
+        paper_authors: Set[str] = set()
+        for idx, record_id in enumerate(self._record_ids):
+            record_base_id = record_id.split("v")[0] if record_id and "v" in record_id else record_id
+            if record_base_id == base_id:
+                paper_idx = idx
+                paper_authors = set(self._records[idx].get("authors", []))
+                break
+
+        if paper_idx is None:
+            self.log_warning("Paper not found for similarity search", paper_id=paper_id)
+            return []
+
+        # Get the paper's embedding and compute similarities
+        paper_embedding = self._embeddings[paper_idx]
+        similarities = np.dot(self._embeddings, paper_embedding)
+
+        # Build candidates with filters
+        candidates: List[Tuple[int, float]] = []
+        for idx, score in enumerate(similarities):
+            if idx == paper_idx:  # Skip the query paper itself
+                continue
+
+            record = self._records[idx]
+
+            # Category filter
+            if category and record.get("category") != category:
+                continue
+
+            # Same-author filter
+            if exclude_same_authors:
+                record_authors = set(record.get("authors", []))
+                if record_authors & paper_authors:  # Any overlap
+                    continue
+
+            candidates.append((idx, float(score)))
+
+        # Sort by similarity descending
+        candidates.sort(key=lambda item: item[1], reverse=True)
+
+        # Build results
+        results: List[Dict] = []
+        for idx, score in candidates[:top_k]:
+            record = self._records[idx]
+            results.append({
+                "id": record.get("id"),
+                "title": record.get("title"),
+                "abstract": record.get("abstract"),
+                "authors": record.get("authors"),
+                "published": record.get("published"),
+                "category": record.get("category"),
+                "link": record.get("link"),
+                "similarity_score": round(score, 4),
+            })
+
+        return results
+
+    def get_paper_by_id(self, paper_id: str) -> Optional[Dict]:
+        """Get a paper by its ID."""
+        if not self.enabled:
+            return None
+
+        base_id = paper_id.split("v")[0] if "v" in paper_id else paper_id
+
+        for idx, record_id in enumerate(self._record_ids):
+            record_base_id = record_id.split("v")[0] if record_id and "v" in record_id else record_id
+            if record_base_id == base_id:
+                record = self._records[idx]
+                return {
+                    "id": record.get("id"),
+                    "title": record.get("title"),
+                    "abstract": record.get("abstract"),
+                    "authors": record.get("authors"),
+                    "published": record.get("published"),
+                    "category": record.get("category"),
+                    "link": record.get("link"),
+                }
+        return None
+
     # ------------------------------------------------------------------ #
     # Lexical utilities
 
