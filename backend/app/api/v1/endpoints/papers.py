@@ -1,6 +1,7 @@
 """
 API endpoints for paper operations
 """
+import time
 from fastapi import APIRouter, HTTPException, Query, Body
 from typing import List, Dict, Any, Optional
 import json
@@ -17,6 +18,7 @@ from app.schemas.paper import (
     AIAnalysisSchema,
     ContextualSearchRequest,
     ContextualSearchResponse,
+    ContextualSearchTiming,
     EmbeddingCacheInfo,
 )
 from app.core.config import settings
@@ -456,6 +458,14 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
         skip_reranking = request.fast_mode or request.skip_reranking
         skip_synthesis = request.fast_mode or request.skip_synthesis
 
+        # Performance timing
+        t_start = time.perf_counter()
+        timing = {
+            "retrieval_ms": 0.0,
+            "rerank_ms": 0.0,
+            "synthesis_ms": 0.0,
+        }
+
         def _trim(text: str, limit: int = 600) -> str:
             text = (text or "").strip()
             if len(text) > limit:
@@ -463,6 +473,7 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             return text
 
         # Step 1: Retrieve candidates from the local atlas (semantic search + recency weighting)
+        t_retrieval_start = time.perf_counter()
         try:
             papers = local_atlas_service.search(
                 user_description,
@@ -472,6 +483,7 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+        timing["retrieval_ms"] = (time.perf_counter() - t_retrieval_start) * 1000
 
         used_fallback = False
 
@@ -484,9 +496,17 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             papers = await arxiv_service.search_papers(user_description[:120], max_results=top_k)
 
         if not papers:
+            total_ms = (time.perf_counter() - t_start) * 1000
             return ContextualSearchResponse(
                 analysis="No relevant papers found for your project description.",
                 papers=[],
+                timing=ContextualSearchTiming(
+                    total_ms=total_ms,
+                    retrieval_ms=timing["retrieval_ms"],
+                    rerank_ms=0,
+                    synthesis_ms=0,
+                    mode="no_results",
+                ),
             )
 
         # Step 2: Normalize papers for downstream synthesis
@@ -506,19 +526,30 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
 
         # Optional reranking step (saves 500-2000ms when skipped)
         if not skip_reranking:
+            t_rerank_start = time.perf_counter()
             rerank_service = get_rerank_service()
             papers_for_response = rerank_service.rerank(
                 user_description,
                 papers_for_response,
                 top_k=top_k,
             )
+            timing["rerank_ms"] = (time.perf_counter() - t_rerank_start) * 1000
 
         # Optional synthesis step (saves 2-5s when skipped)
         if skip_synthesis:
             # Fast path: return papers without AI synthesis
+            total_ms = (time.perf_counter() - t_start) * 1000
+            mode = "fast" if request.fast_mode else "skip_synthesis"
             return ContextualSearchResponse(
                 analysis="Fast mode: AI synthesis skipped for faster response.",
-                papers=papers_for_response
+                papers=papers_for_response,
+                timing=ContextualSearchTiming(
+                    total_ms=total_ms,
+                    retrieval_ms=timing["retrieval_ms"],
+                    rerank_ms=timing["rerank_ms"],
+                    synthesis_ms=0,
+                    mode=mode,
+                ),
             )
 
         papers_formatted: List[str] = [
@@ -546,6 +577,8 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
 
         **Analysis Report:**"""
 
+        # Step 3: AI synthesis
+        t_synthesis_start = time.perf_counter()
         if fallback_mode:
             bullet_points = "\n".join(
                 [
@@ -576,6 +609,7 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                     "Here is a quick brief of promising papers:\n"
                     f"{bullet_points}"
                 )
+        timing["synthesis_ms"] = (time.perf_counter() - t_synthesis_start) * 1000
 
         if used_fallback and not fallback_mode:
             analysis_text = (
@@ -583,9 +617,22 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                 + "\n\n_Note: pulled from live arXiv due to no local atlas match._"
             )
 
+        # Calculate total time and determine mode
+        total_ms = (time.perf_counter() - t_start) * 1000
+        mode = "full"
+        if skip_reranking:
+            mode = "skip_rerank"
+
         return ContextualSearchResponse(
             analysis=analysis_text,
-            papers=papers_for_response
+            papers=papers_for_response,
+            timing=ContextualSearchTiming(
+                total_ms=total_ms,
+                retrieval_ms=timing["retrieval_ms"],
+                rerank_ms=timing["rerank_ms"],
+                synthesis_ms=timing["synthesis_ms"],
+                mode=mode,
+            ),
         )
 
     except HTTPException:

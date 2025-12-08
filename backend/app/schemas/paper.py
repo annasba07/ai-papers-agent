@@ -140,7 +140,17 @@ class ContextualSearchRequest(BaseModel):
         }
 
 
+class ContextualSearchTiming(BaseModel):
+    """Timing breakdown for contextual search performance analysis"""
+    total_ms: float = Field(..., description="Total request time in milliseconds")
+    retrieval_ms: float = Field(0, description="Atlas search time in milliseconds")
+    rerank_ms: float = Field(0, description="Reranking time in milliseconds")
+    synthesis_ms: float = Field(0, description="AI synthesis time in milliseconds")
+    mode: str = Field("full", description="fast|skip_rerank|skip_synthesis|full")
+
+
 class ContextualSearchResponse(BaseModel):
     """Schema for contextual search response"""
     analysis: str = Field(..., description="AI-generated analysis and recommendations")
     papers: List[Dict[str, Any]] = Field(..., description="Relevant papers found")
+    timing: Optional[ContextualSearchTiming] = Field(None, description="Performance timing breakdown")
