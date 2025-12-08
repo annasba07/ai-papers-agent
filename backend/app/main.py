@@ -2,12 +2,32 @@
 FastAPI application entry point with clean service architecture
 """
 from typing import Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.api import api_router
 from app.services.local_atlas_service import local_atlas_service
+from app.services.scheduler_service import get_scheduler_service
+from app.db.database import connect_db, disconnect_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup/shutdown events"""
+    # Startup
+    await connect_db()
+
+    # Start the scheduler for background jobs (if enabled)
+    scheduler = get_scheduler_service()
+    scheduler.start()
+
+    yield
+
+    # Shutdown
+    scheduler.stop()
+    await disconnect_db()
 
 
 def create_application() -> FastAPI:
@@ -15,9 +35,10 @@ def create_application() -> FastAPI:
     app = FastAPI(
         title=settings.PROJECT_NAME,
         version=settings.PROJECT_VERSION,
-        openapi_url=f"{settings.API_V1_STR}/openapi.json"
+        openapi_url=f"{settings.API_V1_STR}/openapi.json",
+        lifespan=lifespan
     )
-    
+
     # CORS configuration
     app.add_middleware(
         CORSMiddleware,
@@ -27,10 +48,10 @@ def create_application() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "Accept"],
         max_age=3600,  # Cache preflight requests for 1 hour
     )
-    
+
     # Include API routes
     app.include_router(api_router, prefix=settings.API_V1_STR)
-    
+
     return app
 
 

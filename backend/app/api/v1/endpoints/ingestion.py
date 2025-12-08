@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
 from app.services.daily_ingestion_service import get_daily_ingestion_service
+from app.services.scheduler_service import get_scheduler_service
 from app.core.config import settings
 
 
@@ -167,3 +168,17 @@ async def get_available_categories():
         "description": "These are the default arXiv categories used for paper ingestion. "
                        "You can specify a subset when triggering ingestion."
     }
+
+
+@router.get("/scheduler")
+async def get_scheduler_status():
+    """
+    Get the scheduler service status.
+
+    Returns information about:
+    - Whether the scheduler is enabled and running
+    - Scheduled ingestion time (UTC)
+    - List of scheduled jobs with next run times
+    """
+    scheduler = get_scheduler_service()
+    return scheduler.get_status()
