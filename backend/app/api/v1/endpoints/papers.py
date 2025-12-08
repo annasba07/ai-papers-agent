@@ -437,7 +437,13 @@ async def batch_analyze_papers(request: BatchAnalysisRequest = Body(...)):
 @router.post("/contextual-search", response_model=ContextualSearchResponse)
 async def contextual_search(request: ContextualSearchRequest = Body(...)):
     """
-    Contextual search: Analyze user's project description and find relevant papers with recommendations
+    Contextual search: Analyze user's project description and find relevant papers with recommendations.
+
+    Performance modes:
+    - Default: Full pipeline with reranking + AI synthesis (~3-10s)
+    - fast_mode=True: Skip both reranking and synthesis (~200-500ms)
+    - skip_reranking=True: Skip reranking only (~500-2000ms savings)
+    - skip_synthesis=True: Skip AI synthesis only (~2-5s savings)
     """
     try:
         user_description = request.description.strip()
@@ -445,6 +451,10 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
         fallback_mode = getattr(ai_analysis_service, "fallback_mode", False)
         top_k = settings.CONTEXTUAL_SEARCH_TOP_K
         max_days = settings.CONTEXTUAL_SEARCH_MAX_DAYS
+
+        # Fast mode implies both skip_reranking and skip_synthesis
+        skip_reranking = request.fast_mode or request.skip_reranking
+        skip_synthesis = request.fast_mode or request.skip_synthesis
 
         def _trim(text: str, limit: int = 600) -> str:
             text = (text or "").strip()
@@ -494,12 +504,22 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                 }
             )
 
-        rerank_service = get_rerank_service()
-        papers_for_response = rerank_service.rerank(
-            user_description,
-            papers_for_response,
-            top_k=top_k,
-        )
+        # Optional reranking step (saves 500-2000ms when skipped)
+        if not skip_reranking:
+            rerank_service = get_rerank_service()
+            papers_for_response = rerank_service.rerank(
+                user_description,
+                papers_for_response,
+                top_k=top_k,
+            )
+
+        # Optional synthesis step (saves 2-5s when skipped)
+        if skip_synthesis:
+            # Fast path: return papers without AI synthesis
+            return ContextualSearchResponse(
+                analysis="Fast mode: AI synthesis skipped for faster response.",
+                papers=papers_for_response
+            )
 
         papers_formatted: List[str] = [
             f"- Title: {item['title']}\n  Summary: {_trim(item.get('summary', ''))}"

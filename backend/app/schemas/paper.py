@@ -117,12 +117,25 @@ class ContextualSearchRequest(BaseModel):
     """Schema for contextual search request"""
     description: str = Field(..., min_length=10, description="Project description to find relevant papers")
     embedding_label: Optional[str] = Field(None, description="Optional embedding cache label to use")
+    fast_mode: bool = Field(
+        False,
+        description="Skip reranking and AI synthesis for faster results (retrieval only)"
+    )
+    skip_reranking: bool = Field(
+        False,
+        description="Skip reranking step to save 500-2000ms latency"
+    )
+    skip_synthesis: bool = Field(
+        False,
+        description="Skip AI synthesis step to save 2-5s latency (just return papers)"
+    )
 
     class Config:
         schema_extra = {
             "example": {
                 "description": "I am building a mobile app that identifies plant species from a photo taken by the user. I need to know the best models for high-accuracy, on-device image classification.",
                 "embedding_label": "specter2",
+                "fast_mode": False,
             }
         }
 
@@ -130,4 +143,4 @@ class ContextualSearchRequest(BaseModel):
 class ContextualSearchResponse(BaseModel):
     """Schema for contextual search response"""
     analysis: str = Field(..., description="AI-generated analysis and recommendations")
-    papers: List[Dict[str, str]] = Field(..., description="Relevant papers found")
+    papers: List[Dict[str, Any]] = Field(..., description="Relevant papers found")
