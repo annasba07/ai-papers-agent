@@ -8,6 +8,7 @@ from app.services.arxiv_service import arxiv_service
 from app.services.ai_analysis_service import ai_analysis_service
 from app.services.rerank_service import get_rerank_service
 from app.services.local_atlas_service import local_atlas_service
+from app.services.citation_graph_service import get_citation_graph_service
 from app.db.database import database
 from app.schemas.paper import (
     PaperResponse,
@@ -159,6 +160,111 @@ async def get_similar_papers(
             "exclude_same_authors": exclude_same_authors,
         }
     }
+
+
+@router.get("/graph/{paper_id}")
+async def get_paper_graph(
+    paper_id: str,
+    max_depth: int = Query(2, ge=1, le=3, description="Maximum graph depth"),
+    neighbors_per_node: int = Query(5, ge=1, le=10, description="Similar papers per node"),
+    min_similarity: float = Query(0.5, ge=0.3, le=0.9, description="Minimum similarity threshold"),
+    category: Optional[str] = Query(None, description="Filter by arXiv category"),
+):
+    """
+    Get a citation/similarity graph for visualization.
+
+    Returns a graph structure with nodes and edges suitable for visualization libraries
+    like D3.js, Cytoscape, or react-force-graph.
+
+    - **paper_id**: The central paper ID
+    - **max_depth**: How many hops to explore (1-3)
+    - **neighbors_per_node**: Number of similar papers per node (1-10)
+    - **min_similarity**: Minimum similarity for edges (0.3-0.9)
+    - **category**: Optional arXiv category filter
+
+    Returns nodes with paper metadata and edges with similarity scores.
+    """
+    service = get_citation_graph_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Citation graph service not available (no embeddings)"
+        )
+
+    graph = service.build_similarity_graph(
+        paper_id,
+        max_depth=max_depth,
+        neighbors_per_node=neighbors_per_node,
+        min_similarity=min_similarity,
+        category=category,
+    )
+
+    if graph is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paper '{paper_id}' not found in atlas"
+        )
+
+    return graph.to_dict()
+
+
+@router.post("/graph/cluster")
+async def get_cluster_graph(
+    paper_ids: List[str] = Body(..., min_length=2, max_length=20),
+    min_similarity: float = Query(0.5, ge=0.3, le=0.9),
+):
+    """
+    Get a graph showing relationships between a set of papers.
+
+    Useful for visualizing connections within a reading list or search results.
+
+    - **paper_ids**: List of paper IDs to include (2-20)
+    - **min_similarity**: Minimum similarity for edges
+
+    Returns nodes for all papers and edges for pairs above the similarity threshold.
+    """
+    service = get_citation_graph_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Citation graph service not available"
+        )
+
+    graph = service.build_cluster_graph(paper_ids, min_similarity=min_similarity)
+    return graph.to_dict()
+
+
+@router.get("/neighborhood/{paper_id}")
+async def get_paper_neighborhood(
+    paper_id: str,
+    top_k: int = Query(15, ge=5, le=50, description="Number of neighbors to return"),
+):
+    """
+    Get immediate neighborhood of a paper with similarity tiers.
+
+    Simpler than the full graph - returns papers grouped by similarity level.
+
+    - **paper_id**: The paper ID
+    - **top_k**: Number of neighbors to return
+
+    Returns papers grouped into: highly_similar (>0.85), similar (0.7-0.85), related (0.5-0.7)
+    """
+    service = get_citation_graph_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Citation graph service not available"
+        )
+
+    result = service.get_paper_neighborhood(paper_id, top_k=top_k)
+
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+
+    return result
 
 
 @router.get("/search", response_model=List[Dict[str, Any]])
