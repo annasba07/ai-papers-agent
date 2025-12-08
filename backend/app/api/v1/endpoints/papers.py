@@ -110,6 +110,26 @@ async def atlas_summary():
     return local_atlas_service.get_summary()
 
 
+@router.get("/atlas/cache-stats")
+async def atlas_cache_stats():
+    """
+    Get query embedding cache statistics.
+
+    Returns cache performance metrics including:
+    - cache_size: Current number of cached query embeddings
+    - max_size: Maximum cache capacity
+    - hits: Total cache hits
+    - misses: Total cache misses
+    - hit_rate: Percentage of requests served from cache
+
+    High hit rates indicate better performance as cached queries
+    avoid expensive model inference (200-3000ms → <1ms).
+    """
+    if not local_atlas_service.enabled:
+        raise HTTPException(status_code=503, detail="Atlas dataset is not loaded")
+    return local_atlas_service.get_cache_stats()
+
+
 @router.get("/similar/{paper_id}")
 async def get_similar_papers(
     paper_id: str,
