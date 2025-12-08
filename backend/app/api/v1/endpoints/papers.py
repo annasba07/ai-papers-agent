@@ -2,12 +2,13 @@
 API endpoints for paper operations
 """
 from fastapi import APIRouter, HTTPException, Query, Body
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from app.services.arxiv_service import arxiv_service
 from app.services.ai_analysis_service import ai_analysis_service
 from app.services.rerank_service import get_rerank_service
 from app.services.local_atlas_service import local_atlas_service
+from app.db.database import database
 from app.schemas.paper import (
     PaperResponse,
     PaperSearchParams,
@@ -20,6 +21,63 @@ from app.schemas.paper import (
 from app.core.config import settings
 
 router = APIRouter()
+
+
+async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch a paper from the Supabase atlas database.
+    Returns None if not found.
+    """
+    try:
+        query = """
+            SELECT
+                p.id,
+                p.title,
+                p.abstract,
+                p.authors,
+                p.published_date,
+                p.category,
+                p.citation_count,
+                p.ai_analysis,
+                COALESCE(
+                    (SELECT array_agg(c.name)
+                     FROM paper_concepts pc
+                     JOIN concepts c ON pc.concept_id = c.id
+                     WHERE pc.paper_id = p.id),
+                    ARRAY[]::text[]
+                ) as concepts
+            FROM papers p
+            WHERE p.id = :paper_id
+        """
+        row = await database.fetch_one(query, {"paper_id": paper_id})
+
+        if not row:
+            return None
+
+        # Parse authors JSON
+        authors = row["authors"]
+        if isinstance(authors, str):
+            authors = json.loads(authors)
+
+        plain_id = row["id"].split("v")[0]
+
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "summary": row["abstract"],  # Map abstract to summary for compatibility
+            "abstract": row["abstract"],
+            "authors": authors,
+            "published": row["published_date"].isoformat() if row["published_date"] else None,
+            "category": row["category"],
+            "link": f"https://arxiv.org/abs/{plain_id}",
+            "citation_count": row["citation_count"] or 0,
+            "concepts": row["concepts"] or [],
+            "aiSummary": row["ai_analysis"]  # Include pre-computed AI analysis if available
+        }
+    except Exception as e:
+        # Log error but don't fail - caller will fall back to arXiv
+        print(f"Atlas DB lookup failed for {paper_id}: {e}")
+        return None
 
 @router.get("/embedding-caches", response_model=List[EmbeddingCacheInfo])
 async def list_embedding_caches():
@@ -49,6 +107,58 @@ async def atlas_summary():
     if not local_atlas_service.enabled:
         raise HTTPException(status_code=503, detail="Atlas dataset is not loaded")
     return local_atlas_service.get_summary()
+
+
+@router.get("/similar/{paper_id}")
+async def get_similar_papers(
+    paper_id: str,
+    top_k: int = Query(10, ge=1, le=50, description="Number of similar papers to return"),
+    category: Optional[str] = Query(None, description="Filter by arXiv category"),
+    exclude_same_authors: bool = Query(False, description="Exclude papers by same authors"),
+):
+    """
+    Find papers similar to a given paper using semantic embedding similarity.
+
+    Uses cosine similarity between paper embeddings to find the most related papers.
+
+    - **paper_id**: The arXiv ID of the paper to find similar papers for
+    - **top_k**: Maximum number of similar papers to return (1-50)
+    - **category**: Optional arXiv category filter (e.g., "cs.AI", "cs.LG")
+    - **exclude_same_authors**: If true, excludes papers by the same authors
+
+    Returns papers ranked by similarity score (0-1, higher = more similar).
+    """
+    if not local_atlas_service.enabled:
+        raise HTTPException(status_code=503, detail="Atlas dataset is not loaded")
+
+    if local_atlas_service._embeddings is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Embeddings not available. Similar papers requires embedding support."
+        )
+
+    # First check if the paper exists
+    source_paper = local_atlas_service.get_paper_by_id(paper_id)
+    if not source_paper:
+        raise HTTPException(status_code=404, detail=f"Paper '{paper_id}' not found in atlas")
+
+    # Find similar papers
+    similar_papers = local_atlas_service.find_similar(
+        paper_id,
+        top_k=top_k,
+        category=category,
+        exclude_same_authors=exclude_same_authors,
+    )
+
+    return {
+        "source_paper": source_paper,
+        "similar_papers": similar_papers,
+        "count": len(similar_papers),
+        "filters": {
+            "category": category,
+            "exclude_same_authors": exclude_same_authors,
+        }
+    }
 
 
 @router.get("/search", response_model=List[Dict[str, Any]])
@@ -358,14 +468,18 @@ async def generate_code_for_paper(paper_id: str):
     try:
         from app.agents import get_orchestrator
 
-        # Get paper details
-        paper = await arxiv_service.get_paper_by_id(paper_id)
+        # Get paper details - try atlas-db first, then fall back to arXiv
+        paper = await get_paper_from_atlas_db(paper_id)
 
         if not paper:
-            raise HTTPException(status_code=404, detail="Paper not found")
+            # Fall back to arXiv API for papers not in our database
+            paper = await arxiv_service.get_paper_by_id(paper_id)
 
-        # Get AI analysis if not already present
-        if 'aiSummary' not in paper:
+        if not paper:
+            raise HTTPException(status_code=404, detail="Paper not found in atlas database or arXiv")
+
+        # Get AI analysis if not already present or is None
+        if not paper.get('aiSummary'):
             ai_summary = await ai_analysis_service.generate_comprehensive_analysis(
                 paper.get('summary', ''),
                 paper.get('title', ''),
@@ -386,35 +500,35 @@ async def generate_code_for_paper(paper_id: str):
             paper_category=paper.get('category', 'cs.AI')
         )
 
-        # Return formatted response
+        # Return formatted response matching frontend GenerationResult interface
         return {
             "success": result.success,
-            "generation_time": result.generation_time_seconds,
+            "generation_time_seconds": result.generation_time_seconds,
             "paper": {
                 "id": result.paper_id,
                 "title": result.paper_title,
                 "analysis_summary": result.analysis_summary
             },
             "code": {
-                "main": result.code.main_code if result.code else None,
-                "config": result.code.config_code if result.code else None,
-                "utils": result.code.utils_code if result.code else None,
-                "example": result.code.example_code if result.code else None,
+                "main_code": result.code.main_code if result.code else None,
+                "test_code": result.tests.fixtures if result.tests else None,
+                "example_code": result.code.example_code if result.code else None,
+                "config_code": result.code.config_code if result.code else None,
                 "dependencies": result.code.dependencies if result.code else [],
                 "framework": result.code.framework if result.code else "pytorch"
             },
             "tests": {
-                "total": result.tests.total_tests if result.tests else 0,
-                "passed": result.test_results.tests_passed if result.test_results else 0,
-                "failed": result.test_results.tests_failed if result.test_results else 0,
+                "total_tests": result.tests.total_tests if result.tests else 0
+            },
+            "test_results": {
+                "tests_passed": result.test_results.tests_passed if result.test_results else 0,
+                "tests_total": result.test_results.tests_total if result.test_results else 0,
+                "tests_failed": result.test_results.tests_failed if result.test_results else 0,
                 "execution_time": result.test_results.execution_time if result.test_results else 0
             },
-            "debug": {
-                "iterations": result.debug_iterations,
-                "total_attempts": result.total_attempts
-            },
+            "debug_iterations": result.debug_iterations,
             "readme": result.readme,
-            "reflection": result.system_reflection
+            "system_reflection": result.system_reflection
         }
 
     except HTTPException:
@@ -445,14 +559,18 @@ async def generate_code_simple(paper_id: str):
     try:
         from app.agents.simple_generator import get_simple_generator
 
-        # Get paper details
-        paper = await arxiv_service.get_paper_by_id(paper_id)
+        # Get paper details - try atlas-db first, then fall back to arXiv
+        paper = await get_paper_from_atlas_db(paper_id)
 
         if not paper:
-            raise HTTPException(status_code=404, detail="Paper not found")
+            # Fall back to arXiv API for papers not in our database
+            paper = await arxiv_service.get_paper_by_id(paper_id)
 
-        # Get AI analysis if not already present
-        if 'aiSummary' not in paper:
+        if not paper:
+            raise HTTPException(status_code=404, detail="Paper not found in atlas database or arXiv")
+
+        # Get AI analysis if not already present or is None
+        if not paper.get('aiSummary'):
             ai_summary = await ai_analysis_service.generate_comprehensive_analysis(
                 paper.get('summary', ''),
                 paper.get('title', ''),
@@ -472,33 +590,33 @@ async def generate_code_simple(paper_id: str):
             paper_category=paper.get('category', 'cs.AI')
         )
 
-        # Return formatted response
+        # Return formatted response matching frontend GenerationResult interface
         return {
             "success": result.success,
-            "generation_time": result.generation_time_seconds,
+            "generation_time_seconds": result.generation_time_seconds,
             "approach": "simple",  # Mark which approach was used
             "paper": {
                 "id": result.paper_id,
                 "title": result.paper_title
             },
             "code": {
-                "model": result.code,
-                "config": result.config,
-                "utils": None,  # Simple approach may not generate utils
-                "example": result.example
+                "main_code": result.code,
+                "test_code": result.tests,
+                "config_code": result.config,
+                "example_code": result.example,
+                "dependencies": []
             },
             "tests": {
-                "code": result.tests,
-                "total": result.tests_total,
-                "passed": result.tests_passed,
-                "failed": result.tests_failed
+                "total_tests": result.tests_total
             },
-            "metadata": {
-                "complexity": result.complexity,
-                "debug_iterations": result.debug_iterations
+            "test_results": {
+                "tests_passed": result.tests_passed,
+                "tests_total": result.tests_total,
+                "tests_failed": result.tests_failed
             },
+            "debug_iterations": result.debug_iterations,
             "readme": result.readme,
-            "reflection": result.reflection
+            "system_reflection": result.reflection
         }
 
     except HTTPException:
