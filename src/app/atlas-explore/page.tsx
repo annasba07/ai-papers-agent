@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import CitationGraph from '@/components/CitationGraph';
 
 type AtlasPaper = {
   id?: string;
@@ -51,6 +52,8 @@ export default function AtlasExplorePage() {
   const [days, setDays] = useState<number>(90);
   const [query, setQuery] = useState<string>('');
   const [selectedTimelineCat, setSelectedTimelineCat] = useState<string>('');
+  const [graphPaperId, setGraphPaperId] = useState<string>('');
+  const [graphPaperTitle, setGraphPaperTitle] = useState<string>('');
 
   const availableCategories = useMemo(() => {
     if (summary?.topCategories?.length) {
@@ -130,6 +133,18 @@ export default function AtlasExplorePage() {
     if (!key || !summary.timeline[key]) return [];
     return summary.timeline[key].slice(-12); // last 12 months
   }, [summary, selectedTimelineCat]);
+
+  const handleSelectPaperForGraph = (paper: AtlasPaper) => {
+    if (paper.id) {
+      setGraphPaperId(paper.id);
+      setGraphPaperTitle(paper.title || 'Unknown');
+    }
+  };
+
+  const handleGraphNodeClick = (nodeId: string, title: string) => {
+    setGraphPaperId(nodeId);
+    setGraphPaperTitle(title);
+  };
 
   const handleContextualSearch = async () => {
     if (!contextDescription.trim()) return;
@@ -305,17 +320,28 @@ export default function AtlasExplorePage() {
           ) : (
             <div className="paper-grid">
               {papers.slice(0, 9).map((paper, idx) => (
-                <a
-                  key={`${paper.id}-${idx}`}
-                  className="highlight-card"
-                  href={paper.link || `http://arxiv.org/abs/${paper.id || ''}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <div key={`${paper.id}-${idx}`} className="highlight-card">
                   <div className="badge">{paper.category}</div>
                   <h4>{paper.title}</h4>
                   <p>{paper.abstract?.slice(0, 160)}{paper.abstract && paper.abstract.length > 160 ? '…' : ''}</p>
-                </a>
+                  <div className="highlight-card__actions">
+                    <a
+                      href={paper.link || `http://arxiv.org/abs/${paper.id || ''}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-sm"
+                    >
+                      View Paper
+                    </a>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => handleSelectPaperForGraph(paper)}
+                    >
+                      View Graph
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -336,6 +362,35 @@ export default function AtlasExplorePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Similarity Graph Section */}
+      <section className="card graph-section">
+        <div className="graph-section__header">
+          <h2>Paper Similarity Graph</h2>
+          <p className="muted">Explore related papers through embedding similarity. Click a paper above or enter an ID.</p>
+        </div>
+        <div className="graph-section__controls">
+          <input
+            type="text"
+            className="graph-section__input"
+            placeholder="Enter paper ID (e.g., 2501.12345)"
+            value={graphPaperId}
+            onChange={(e) => {
+              setGraphPaperId(e.target.value);
+              setGraphPaperTitle('');
+            }}
+          />
+          {graphPaperTitle && (
+            <span className="graph-section__selected">
+              Viewing: <strong>{graphPaperTitle}</strong>
+            </span>
+          )}
+        </div>
+        <CitationGraph
+          paperId={graphPaperId}
+          onNodeClick={handleGraphNodeClick}
+        />
       </section>
     </main>
   );
