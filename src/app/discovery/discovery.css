@@ -712,6 +712,12 @@
   color: var(--dc-text-muted);
 }
 
+.learning-paper__time {
+  font-size: 0.7rem;
+  color: var(--dc-copper-light);
+  opacity: 0.8;
+}
+
 /* === Loading State === */
 .discovery-loading {
   display: flex;

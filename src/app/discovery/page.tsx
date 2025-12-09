@@ -48,13 +48,24 @@ interface TldrResponse {
   total: number;
 }
 
+interface LearningPathLevel {
+  level: string;
+  description: string;
+  papers: {
+    id: string;
+    title: string;
+    difficulty_level: string;
+    prerequisites: string[];
+    reading_time_minutes: number;
+    key_sections: string[];
+    summary?: string;
+  }[];
+}
+
 interface LearningPathResponse {
-  beginner: DiscoveryPaper[];
-  intermediate: DiscoveryPaper[];
-  advanced: DiscoveryPaper[];
-  expert: DiscoveryPaper[];
-  suggested_path: string[];
-  total_by_level: Record<string, number>;
+  topic: string | null;
+  category: string | null;
+  path: LearningPathLevel[];
 }
 
 // Animated number counter
@@ -218,10 +229,10 @@ export default function DiscoveryPage() {
       setLoading(true);
       try {
         const [statsRes, impactRes, tldrRes, learningRes] = await Promise.all([
-          fetch(`${API_BASE}/api/v1/discovery/stats`),
-          fetch(`${API_BASE}/api/v1/discovery/impact?min_score=${minImpact}&limit=12`),
-          fetch(`${API_BASE}/api/v1/discovery/tldr?limit=8`),
-          fetch(`${API_BASE}/api/v1/discovery/learning-path?papers_per_level=4`),
+          fetch(`${API_BASE}/discovery/stats`),
+          fetch(`${API_BASE}/discovery/impact?min_score=${minImpact}&limit=12`),
+          fetch(`${API_BASE}/discovery/tldr?limit=8`),
+          fetch(`${API_BASE}/discovery/learning-path?limit_per_level=4`),
         ]);
 
         if (statsRes.ok) {
@@ -465,26 +476,26 @@ export default function DiscoveryPage() {
                   </header>
 
                   <div className="learning-ladder">
-                    {(['beginner', 'intermediate', 'advanced', 'expert'] as const).map((level, idx) => {
-                      const papers = learningPath[level] || [];
-                      const total = learningPath.total_by_level[level] || 0;
-                      if (papers.length === 0) return null;
+                    {learningPath.path.map((levelData, idx) => {
+                      if (levelData.papers.length === 0) return null;
 
                       return (
-                        <div key={level} className="learning-rung" style={{ '--delay': `${idx * 100}ms` } as React.CSSProperties}>
+                        <div key={levelData.level} className="learning-rung" style={{ '--delay': `${idx * 100}ms` } as React.CSSProperties}>
                           <div className="learning-rung__header">
-                            <DifficultyBadge level={level} />
-                            <span className="learning-rung__count">{total.toLocaleString()} papers</span>
+                            <DifficultyBadge level={levelData.level} />
+                            <span className="learning-rung__count">{levelData.description}</span>
                           </div>
                           <div className="learning-rung__papers">
-                            {papers.map((paper) => (
+                            {levelData.papers.map((paper) => (
                               <article key={paper.id} className="learning-paper">
                                 <h4>
                                   <Link href={`https://arxiv.org/abs/${paper.id.split('v')[0]}`} target="_blank">
                                     {paper.title}
                                   </Link>
                                 </h4>
-                                <span className="learning-paper__category">{paper.category}</span>
+                                {paper.reading_time_minutes && (
+                                  <span className="learning-paper__time">{paper.reading_time_minutes} min read</span>
+                                )}
                               </article>
                             ))}
                           </div>
