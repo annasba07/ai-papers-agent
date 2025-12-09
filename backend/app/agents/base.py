@@ -5,14 +5,15 @@ Implements core agent functionality with:
 - Standardized communication protocol
 - Reflection capabilities (Reflexion pattern)
 - Memory integration
+- Multi-provider LLM support (Claude, GPT-4, Gemini)
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from anthropic import Anthropic
 import asyncio
 from app.utils.logger import LoggerMixin
 from app.agents.memory import TemporalMemory
 from app.agents.config import AgentConfig
+from app.agents.llm_providers import get_llm_provider, BaseLLMProvider
 
 
 class BaseAgent(LoggerMixin, ABC):
@@ -24,6 +25,7 @@ class BaseAgent(LoggerMixin, ABC):
     - Reflection capabilities
     - Memory integration
     - Error handling and retries
+    - Multi-provider LLM support
     """
 
     def __init__(
@@ -38,13 +40,16 @@ class BaseAgent(LoggerMixin, ABC):
         self.config = config
         self.memory = memory
 
-        # Initialize LLM client
-        if config.llm_provider == "anthropic":
-            self.llm = Anthropic()
-        else:
-            raise ValueError(f"Unsupported LLM provider: {config.llm_provider}")
+        # Initialize LLM provider using factory
+        self.llm: BaseLLMProvider = get_llm_provider(
+            provider=config.llm_provider,
+            model=config.llm_model
+        )
 
-        self.log_info(f"Initialized {name} agent")
+        self.log_info(
+            f"Initialized {name} agent with {self.llm.provider_name} "
+            f"({self.llm.get_model_name()})"
+        )
 
     async def generate(
         self,
@@ -53,27 +58,26 @@ class BaseAgent(LoggerMixin, ABC):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> str:
-        """Generate text using LLM with retry logic"""
+        """Generate text using LLM with retry logic (multi-provider support)"""
 
         for attempt in range(self.config.max_retries):
             try:
                 messages = [{"role": "user", "content": prompt}]
 
-                response = await asyncio.to_thread(
-                    self.llm.messages.create,
-                    model=self.config.llm_model,
-                    max_tokens=max_tokens or self.config.max_tokens,
+                # Use the provider abstraction
+                response = await self.llm.generate(
+                    messages=messages,
+                    system_prompt=system_prompt or self._get_system_prompt(),
                     temperature=temperature or self.config.temperature,
-                    system=system_prompt or self._get_system_prompt(),
-                    messages=messages
+                    max_tokens=max_tokens or self.config.max_tokens
                 )
 
-                # Extract text from response
-                text = response.content[0].text
+                # Extract text from standardized response
+                text = response.text
 
                 self.log_debug(
                     f"Generated {len(text)} chars",
-                    tokens=response.usage.input_tokens + response.usage.output_tokens
+                    tokens=response.input_tokens + response.output_tokens
                 )
 
                 return text

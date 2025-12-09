@@ -42,6 +42,7 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
                 p.category,
                 p.citation_count,
                 p.ai_analysis,
+                p.deep_analysis,
                 COALESCE(
                     (SELECT array_agg(c.name)
                      FROM paper_concepts pc
@@ -75,7 +76,8 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
             "link": f"https://arxiv.org/abs/{plain_id}",
             "citation_count": row["citation_count"] or 0,
             "concepts": row["concepts"] or [],
-            "aiSummary": row["ai_analysis"]  # Include pre-computed AI analysis if available
+            "aiSummary": row["ai_analysis"],  # Tier 1: Abstract-based analysis
+            "deepAnalysis": row["deep_analysis"]  # Tier 2: PDF-based analysis
         }
     except Exception as e:
         # Log error but don't fail - caller will fall back to arXiv

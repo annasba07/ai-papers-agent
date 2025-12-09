@@ -1,16 +1,51 @@
 """
 Configuration for multi-agent system
+
+Supports multiple LLM providers via environment variables:
+- CODE_GEN_PROVIDER: "anthropic" | "openai" | "gemini" (default: "gemini")
+- CODE_GEN_MODEL: Override default model for the provider
+- ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY: Provider API keys
 """
+import os
 from pydantic import BaseModel, Field
 from typing import Optional
+
+# Default models for each provider
+DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-20250514",
+    "openai": "gpt-4o",
+    "gemini": "gemini-2.5-flash-lite",
+}
+
+
+def get_default_provider() -> str:
+    """Get provider from env or auto-detect based on available API keys"""
+    configured = os.getenv("CODE_GEN_PROVIDER")
+    if configured:
+        return configured.lower()
+
+    # Auto-detect: prefer gemini > openai > anthropic
+    if os.getenv("GEMINI_API_KEY"):
+        return "gemini"
+    if os.getenv("OPENAI_API_KEY"):
+        return "openai"
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return "anthropic"
+
+    return "gemini"  # Default, will fail gracefully if no key
+
+
+def get_default_model(provider: str) -> str:
+    """Get default model for a provider"""
+    return os.getenv("CODE_GEN_MODEL") or DEFAULT_MODELS.get(provider, "gemini-2.5-flash-lite")
 
 
 class AgentConfig(BaseModel):
     """Configuration for individual agents"""
 
-    # LLM Configuration
-    llm_provider: str = "anthropic"
-    llm_model: str = "claude-sonnet-4-20250514"
+    # LLM Configuration - now environment-aware
+    llm_provider: str = Field(default_factory=get_default_provider)
+    llm_model: str = Field(default_factory=lambda: get_default_model(get_default_provider()))
     temperature: float = 0.7
     max_tokens: int = 4000
 
@@ -20,6 +55,11 @@ class AgentConfig(BaseModel):
 
     # Timeout Configuration
     timeout_seconds: int = 60
+
+    def model_post_init(self, __context) -> None:
+        """Ensure model matches provider after initialization"""
+        if self.llm_model == get_default_model("gemini"):  # Was set to default
+            self.llm_model = get_default_model(self.llm_provider)
 
 
 class MemoryConfig(BaseModel):

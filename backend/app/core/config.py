@@ -15,7 +15,23 @@ class Settings(BaseSettings):
     PROJECT_VERSION: str = "1.0.0"
 
     # Database Configuration
-    DATABASE_URL: str = "sqlite:///./ai_paper_digest.db"
+    DATABASE_URL: str = "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+    SUPABASE_DATABASE_URL: Optional[str] = None
+
+    # Supabase SDK Configuration
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+
+    @property
+    def is_supabase_configured(self) -> bool:
+        """Check if Supabase SDK is configured"""
+        return bool(self.SUPABASE_URL and self.SUPABASE_ANON_KEY)
+
+    @property
+    def effective_database_url(self) -> str:
+        """Get the effective database URL (prefer Supabase if configured)"""
+        return self.SUPABASE_DATABASE_URL or self.DATABASE_URL
 
     # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379"

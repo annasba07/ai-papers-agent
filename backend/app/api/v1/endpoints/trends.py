@@ -319,8 +319,10 @@ async def compare_techniques(
         )
 
     try:
-        now = datetime.utcnow()
-        cutoff = now - timedelta(days=window_days)
+        # Use reference date from atlas for consistent trend analysis
+        service = get_trend_service()
+        reference_date = service._get_reference_date()
+        cutoff = reference_date - timedelta(days=window_days)
 
         # Normalize technique names
         norm_a = technique_a.lower().replace(" ", "_").replace("-", "_")

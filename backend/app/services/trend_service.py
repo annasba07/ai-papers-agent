@@ -65,7 +65,37 @@ class TrendService(LoggerMixin):
 
     def __init__(self):
         self.technique_extractor = get_technique_extraction_service()
+        self._cached_reference_date: Optional[datetime] = None
         self.log_info("Trend service initialized")
+
+    def _get_reference_date(self) -> datetime:
+        """
+        Get reference date for trend calculations.
+
+        Uses the most recent paper date from the atlas instead of current time.
+        This ensures trends work correctly even with historical data.
+        Falls back to current time if no data available.
+        """
+        if self._cached_reference_date:
+            return self._cached_reference_date
+
+        if not local_atlas_service.enabled or not local_atlas_service._records:
+            return datetime.utcnow()
+
+        # Find the most recent paper date
+        latest_date = None
+        for record in local_atlas_service._records:
+            published_dt = record.get("_published_dt")
+            if published_dt:
+                if latest_date is None or published_dt > latest_date:
+                    latest_date = published_dt
+
+        if latest_date:
+            self._cached_reference_date = latest_date
+            self.log_info(f"Using reference date from atlas: {latest_date.isoformat()}")
+            return latest_date
+
+        return datetime.utcnow()
 
     def get_hot_topics(
         self,
@@ -91,8 +121,8 @@ class TrendService(LoggerMixin):
             self.log_warning("Atlas service not available for trend detection")
             return []
 
-        now = datetime.utcnow()
-        current_cutoff = now - timedelta(days=window_days)
+        reference_date = self._get_reference_date()
+        current_cutoff = reference_date - timedelta(days=window_days)
         previous_cutoff = current_cutoff - timedelta(days=comparison_window_days)
 
         # Count techniques in each window
@@ -169,14 +199,14 @@ class TrendService(LoggerMixin):
         if not local_atlas_service.enabled:
             return []
 
-        now = datetime.utcnow()
+        reference_date = self._get_reference_date()
 
         # Divide lookback into three periods
         period_days = lookback_days // 3
         periods = [
-            (now - timedelta(days=period_days), now),
-            (now - timedelta(days=2 * period_days), now - timedelta(days=period_days)),
-            (now - timedelta(days=3 * period_days), now - timedelta(days=2 * period_days))
+            (reference_date - timedelta(days=period_days), reference_date),
+            (reference_date - timedelta(days=2 * period_days), reference_date - timedelta(days=period_days)),
+            (reference_date - timedelta(days=3 * period_days), reference_date - timedelta(days=2 * period_days))
         ]
 
         # Count by period
@@ -236,8 +266,8 @@ class TrendService(LoggerMixin):
         if not local_atlas_service.enabled:
             return []
 
-        now = datetime.utcnow()
-        cutoff = now - timedelta(days=window_days)
+        reference_date = self._get_reference_date()
+        cutoff = reference_date - timedelta(days=window_days)
 
         author_stats: Dict[str, Dict] = defaultdict(lambda: {
             "total_count": 0,
@@ -293,8 +323,8 @@ class TrendService(LoggerMixin):
         if not local_atlas_service.enabled:
             return []
 
-        now = datetime.utcnow()
-        recent_cutoff = now - timedelta(days=60)
+        reference_date = self._get_reference_date()
+        recent_cutoff = reference_date - timedelta(days=60)
         older_cutoff = recent_cutoff - timedelta(days=60)
 
         recent_counts: Dict[str, int] = defaultdict(int)

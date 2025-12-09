@@ -85,12 +85,16 @@ class OpenAlexProvider(BaseProvider):
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
-    async def get_work_by_arxiv_id(self, arxiv_id: str) -> Optional[OpenAlexWork]:
+    async def get_work_by_arxiv_id(self, arxiv_id: str, title: Optional[str] = None) -> Optional[OpenAlexWork]:
         """
-        Get work data by arXiv ID.
+        Get work data by arXiv ID using location-based search.
+
+        The OpenAlex API no longer supports ids.arxiv filter, so we use
+        primary_location.landing_page_url or title search as fallback.
 
         Args:
             arxiv_id: arXiv paper ID (e.g., "2106.09685")
+            title: Optional title for more accurate matching
 
         Returns:
             OpenAlexWork with metadata, or None if not found
@@ -100,10 +104,14 @@ class OpenAlexProvider(BaseProvider):
 
         try:
             client = await self._get_client()
+
+            # Strategy 1: Search by arXiv URL in locations
+            # OpenAlex indexes arxiv papers with their URL in locations
+            arxiv_url = f"https://arxiv.org/abs/{clean_id}"
             response = await client.get(
                 "/works",
                 params={
-                    "filter": f"ids.arxiv:{clean_id}",
+                    "filter": f"locations.landing_page_url:{arxiv_url}",
                     "per_page": 1
                 }
             )
@@ -111,11 +119,52 @@ class OpenAlexProvider(BaseProvider):
             data = response.json()
 
             results = data.get("results", [])
-            if not results:
-                self.log_debug(f"No OpenAlex record for arXiv:{clean_id}")
-                return None
+            if results:
+                return self._parse_work(results[0], arxiv_id)
 
-            return self._parse_work(results[0], arxiv_id)
+            # Strategy 2: Try with indexed_in:arxiv filter and arXiv ID in title/search
+            response = await client.get(
+                "/works",
+                params={
+                    "filter": "indexed_in:arxiv",
+                    "search": clean_id,
+                    "per_page": 5
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            results = data.get("results", [])
+            for result in results:
+                # Check if arXiv ID appears in any location URL
+                locations = result.get("locations", [])
+                for loc in locations:
+                    landing_page = loc.get("landing_page_url", "") or ""
+                    if clean_id in landing_page:
+                        return self._parse_work(result, arxiv_id)
+
+            # Strategy 3: If title provided, search by title within arxiv-indexed works
+            if title:
+                # Clean title for search
+                search_title = title[:100].replace('"', '')
+                response = await client.get(
+                    "/works",
+                    params={
+                        "filter": "indexed_in:arxiv",
+                        "search": search_title,
+                        "per_page": 5
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                results = data.get("results", [])
+                if results:
+                    # Return the top result (highest relevance)
+                    return self._parse_work(results[0], arxiv_id)
+
+            self.log_debug(f"No OpenAlex record for arXiv:{clean_id}")
+            return None
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:

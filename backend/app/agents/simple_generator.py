@@ -2,13 +2,17 @@
 Elegant Code Generator - Single-conversation approach
 
 Key simplifications:
-1. Claude self-orchestrates via extended context (not separate agents)
+1. LLM self-orchestrates via extended context (not separate agents)
 2. Tools are simple functions (not classes)
 3. Memory is JSON (not graph database)
 4. Self-correcting in single conversation
-5. ~300 lines instead of 4,000
+5. Multi-provider support (Claude, GPT-4, Gemini)
 
 Based on learnings from complex multi-agent system, but simplified.
+
+Environment Variables:
+- CODE_GEN_PROVIDER: "anthropic" | "openai" | "gemini" (default: auto-detect)
+- ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY: Provider API keys
 """
 import asyncio
 import os
@@ -21,7 +25,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pydantic import BaseModel
 
-from anthropic import Anthropic
+from app.agents.llm_providers import get_llm_provider, get_default_provider, BaseLLMProvider
 
 
 class GenerationResult(BaseModel):
@@ -54,19 +58,30 @@ class GenerationResult(BaseModel):
 
 class SimpleCodeGenerator:
     """
-    Elegant code generator using Claude self-orchestration
+    Elegant code generator using LLM self-orchestration
 
-    Instead of separate agent classes, Claude orchestrates itself
-    through a single extended conversation with tool use.
+    Instead of separate agent classes, the LLM orchestrates itself
+    through a single extended conversation with iterative debugging.
+
+    Supports multiple providers: Claude, GPT-4, Gemini
     """
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('ANTHROPIC_API_KEY')
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY required")
+    def __init__(self, provider: Optional[str] = None, api_key: Optional[str] = None):
+        """
+        Initialize the code generator with specified or auto-detected provider
 
-        self.client = Anthropic(api_key=self.api_key)
+        Args:
+            provider: "anthropic", "openai", or "gemini" (auto-detects if None)
+            api_key: Optional API key (otherwise uses env vars)
+        """
+        self.provider_name = provider or get_default_provider()
+        self.llm: BaseLLMProvider = get_llm_provider(
+            provider=self.provider_name,
+            api_key=api_key
+        )
         self.memory_file = Path(__file__).parent / "memory.json"
+
+        print(f"🤖 Code Generator initialized with {self.llm.provider_name} ({self.llm.get_model_name()})")
 
     async def generate(
         self,
@@ -247,101 +262,180 @@ Begin! Think step by step and use the execute_tests tool when ready to test.
         return [{"role": "user", "content": prompt}]
 
     async def _run_conversation(self, messages: List[Dict]) -> Dict:
-        """Run conversation with Claude, handling tool use"""
+        """
+        Run code generation with iterative debugging
 
-        max_turns = 10  # Prevent infinite loops
+        Uses a simpler approach that works across all providers:
+        1. Generate code in one shot
+        2. Execute tests ourselves
+        3. If tests fail, send debug prompt
+        4. Repeat up to max_debug_iterations
+        """
+        import re
 
-        for turn in range(max_turns):
-            print(f"🔄 Conversation turn {turn + 1}/{max_turns}")
+        max_debug_iterations = 3
+        debug_iteration = 0
 
-            response = await asyncio.to_thread(
-                self.client.messages.create,
-                model="claude-sonnet-4-20250514",
-                max_tokens=16000,  # Extended for self-correction
-                temperature=0.7,
-                tools=[{
-                    "name": "execute_tests",
-                    "description": "Execute Python code and pytest tests in a sandbox. Returns test results and any errors.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "code_files": {
-                                "type": "object",
-                                "description": "Dict of filename: content for all Python files",
-                                "properties": {
-                                    "model.py": {"type": "string"},
-                                    "config.py": {"type": "string"},
-                                    "utils.py": {"type": "string"},
-                                    "test_model.py": {"type": "string"}
-                                },
-                                "required": ["model.py", "test_model.py"]
-                            },
-                            "dependencies": {
-                                "type": "array",
-                                "description": "List of pip packages to install",
-                                "items": {"type": "string"}
-                            }
-                        },
-                        "required": ["code_files", "dependencies"]
-                    }
-                }],
-                messages=messages
-            )
+        # System prompt for code generation
+        system_prompt = """You are an expert AI/ML code generator. You implement research papers as working Python code.
 
-            # Check if Claude is done (no tool use)
-            if response.stop_reason == "end_turn":
-                # Extract final result from last message
-                final_text = next(
-                    (block.text for block in response.content if hasattr(block, 'text')),
-                    None
-                )
+CRITICAL: Your response MUST be valid JSON only. No markdown, no explanations outside JSON.
 
-                if final_text:
-                    try:
-                        # Try to parse JSON result
-                        import re
-                        json_match = re.search(r'\{.*\}', final_text, re.DOTALL)
-                        if json_match:
-                            return json.loads(json_match.group())
-                        else:
-                            return {"raw_response": final_text}
-                    except:
-                        return {"raw_response": final_text}
+When generating code:
+- Use clean, readable Python with type hints
+- Include docstrings with paper references
+- Use paper's exact hyperparameters
+- Write comprehensive pytest tests FIRST (TDD)"""
 
-                return {"error": "No response from Claude"}
+        print(f"🔄 Generating code with {self.llm.provider_name}...")
 
-            # Handle tool use
-            if response.stop_reason == "tool_use":
-                tool_use_block = next(
-                    block for block in response.content
-                    if block.type == "tool_use"
-                )
+        # Step 1: Generate initial code
+        response = await self.llm.generate(
+            messages=messages,
+            system_prompt=system_prompt,
+            temperature=0.7,
+            max_tokens=16000
+        )
 
-                # Execute the tool
-                tool_result = await self._execute_tool(
-                    tool_use_block.name,
-                    tool_use_block.input
-                )
+        response_text = response.text
 
-                # Add assistant's response and tool result to conversation
-                messages.append({
-                    "role": "assistant",
-                    "content": response.content
-                })
+        # Try to parse JSON
+        result = self._extract_json(response_text)
 
-                messages.append({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_block.id,
-                        "content": json.dumps(tool_result)
-                    }]
-                })
+        if not result:
+            return {"raw_response": response_text}
 
-                # Continue conversation
-                continue
+        # Step 2: Execute tests if code was generated
+        code = result.get('code', {})
+        tests = result.get('tests')
 
-        return {"error": "Max conversation turns reached"}
+        if code and tests:
+            code_files = {
+                'model.py': code.get('model', ''),
+                'config.py': code.get('config', ''),
+                'utils.py': code.get('utils', ''),
+                'test_model.py': tests
+            }
+
+            # Filter out empty files
+            code_files = {k: v for k, v in code_files.items() if v}
+
+            if 'model.py' in code_files and 'test_model.py' in code_files:
+                # Get dependencies from result
+                deps = result.get('analysis', {}).get('hyperparameters', {}).get('dependencies', [])
+                if not deps:
+                    deps = ['torch', 'numpy', 'pytest']
+
+                # Execute tests
+                test_result = await self._execute_tests_impl(code_files, deps)
+
+                # Update result with execution results
+                result['execution_results'] = {
+                    'tests_total': test_result.get('tests_total', 0),
+                    'tests_passed': test_result.get('tests_passed', 0),
+                    'tests_failed': test_result.get('tests_failed', 0),
+                    'debug_iterations': 0
+                }
+
+                # Step 3: Debug if tests failed
+                while not test_result.get('success') and debug_iteration < max_debug_iterations:
+                    debug_iteration += 1
+                    print(f"🔧 Debug iteration {debug_iteration}/{max_debug_iterations}")
+
+                    # Create debug prompt
+                    debug_prompt = f"""Your tests failed. Fix the issues.
+
+ERROR OUTPUT:
+{test_result.get('stderr', '')[:2000]}
+{test_result.get('stdout', '')[:2000]}
+
+CURRENT CODE:
+model.py:
+{code_files.get('model.py', '')[:3000]}
+
+test_model.py:
+{code_files.get('test_model.py', '')[:2000]}
+
+Analyze the error and provide ONLY updated code as JSON:
+{{
+  "code": {{
+    "model": "fixed model.py content",
+    "config": "config.py content if changed",
+    "utils": "utils.py content if changed"
+  }},
+  "tests": "fixed test_model.py content"
+}}"""
+
+                    # Get fix from LLM
+                    fix_messages = [{"role": "user", "content": debug_prompt}]
+                    fix_response = await self.llm.generate(
+                        messages=fix_messages,
+                        system_prompt="You are debugging Python code. Respond with JSON only.",
+                        temperature=0.5,
+                        max_tokens=8000
+                    )
+
+                    fix_result = self._extract_json(fix_response.text)
+
+                    if fix_result:
+                        # Update code files with fixes
+                        if fix_result.get('code'):
+                            for key, val in fix_result['code'].items():
+                                if val:
+                                    code_files[f'{key}.py' if not key.endswith('.py') else key] = val
+                        if fix_result.get('tests'):
+                            code_files['test_model.py'] = fix_result['tests']
+
+                        # Re-run tests
+                        test_result = await self._execute_tests_impl(code_files, deps)
+
+                        # Update result
+                        result['execution_results'] = {
+                            'tests_total': test_result.get('tests_total', 0),
+                            'tests_passed': test_result.get('tests_passed', 0),
+                            'tests_failed': test_result.get('tests_failed', 0),
+                            'debug_iterations': debug_iteration
+                        }
+
+                        # Update code in result
+                        result['code'] = {
+                            'model': code_files.get('model.py', ''),
+                            'config': code_files.get('config.py', ''),
+                            'utils': code_files.get('utils.py', ''),
+                            'example': code_files.get('example.py', '')
+                        }
+                        result['tests'] = code_files.get('test_model.py', '')
+
+        return result
+
+    def _extract_json(self, text: str) -> Optional[Dict]:
+        """Extract JSON from LLM response text"""
+        import re
+
+        # Try to find JSON block
+        try:
+            # First try: direct JSON parse
+            return json.loads(text)
+        except:
+            pass
+
+        try:
+            # Second try: find JSON in markdown code block
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group(1))
+        except:
+            pass
+
+        try:
+            # Third try: find any JSON object
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+        except:
+            pass
+
+        return None
 
     async def _execute_tool(self, tool_name: str, tool_input: Dict) -> Dict:
         """Execute a tool call"""
@@ -561,12 +655,27 @@ Learning {i}:
         return "\n".join(formatted)
 
 
-# Global instance for easy access
-_generator_instance = None
+# Global instance cache by provider
+_generator_instances: Dict[str, SimpleCodeGenerator] = {}
 
-def get_simple_generator() -> SimpleCodeGenerator:
-    """Get or create global generator instance"""
-    global _generator_instance
-    if _generator_instance is None:
-        _generator_instance = SimpleCodeGenerator()
-    return _generator_instance
+
+def get_simple_generator(provider: Optional[str] = None) -> SimpleCodeGenerator:
+    """
+    Get or create global generator instance for a provider
+
+    Args:
+        provider: "anthropic", "openai", or "gemini" (auto-detects if None)
+
+    Returns:
+        SimpleCodeGenerator instance for the specified provider
+    """
+    global _generator_instances
+
+    # Get provider (may auto-detect)
+    actual_provider = provider or get_default_provider()
+
+    # Create instance if needed
+    if actual_provider not in _generator_instances:
+        _generator_instances[actual_provider] = SimpleCodeGenerator(provider=actual_provider)
+
+    return _generator_instances[actual_provider]

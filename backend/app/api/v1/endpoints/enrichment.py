@@ -1,506 +1,713 @@
 """
-Paper Enrichment API Endpoints
+Enrichment API Endpoints
 
-Provides access to:
-- Citation data (OpenAlex)
-- Code repositories (Papers With Code)
-- Benchmark results
-- Technique extraction
-- Citation graphs
+Provides API access to batch AI enrichment:
+- Tier 1: Abstract-only enrichment (fast, cheap)
+- Tier 2: Deep PDF-based enrichment (multimodal, comprehensive)
+- Trigger enrichment jobs
+- Check enrichment status
+- Enrich individual papers
 """
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Query, Body
+from typing import Optional
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field
 
-from app.services.enrichment_service import get_enrichment_service, EnrichedPaper
-from app.services.providers.openalex_provider import get_openalex_provider, CitationInfo
-from app.services.providers.pwc_provider import get_pwc_provider, PWCRepository, PWCResult
-from app.services.technique_extraction_service import (
-    get_technique_extraction_service,
-    TechniqueExtractionResult
-)
+from app.services.batch_enrichment_service import get_enrichment_service
+from app.services.deep_enrichment_service import get_deep_enrichment_service
 
 
 router = APIRouter(prefix="/enrichment", tags=["Enrichment"])
 
 
 # ============================================================================
-# Response Models
+# Request/Response Models
 # ============================================================================
 
-class CitationResponse(BaseModel):
-    """Citation data response"""
-    paper_id: str
-    cited_by_count: int
-    references_count: int
-    openalex_id: Optional[str] = None
-    concepts: List[Dict[str, Any]] = []
+class EnrichmentRequest(BaseModel):
+    """Request to trigger batch enrichment."""
+    batch_size: int = Field(
+        50,
+        ge=10,
+        le=200,
+        description="Papers per batch"
+    )
+    max_papers: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Maximum papers to process (None = all)"
+    )
+    skip_existing: bool = Field(
+        True,
+        description="Skip papers that already have ai_analysis"
+    )
 
-
-class RepositoryResponse(BaseModel):
-    """Code repository response"""
-    url: str
-    owner: str
-    name: str
-    stars: int
-    framework: Optional[str] = None
-    is_official: bool = False
-
-
-class BenchmarkResponse(BaseModel):
-    """Benchmark result response"""
-    task: str
-    dataset: str
-    metric: str
-    value: float
-    model_name: Optional[str] = None
-
-
-class TechniqueResponse(BaseModel):
-    """Extracted technique"""
-    name: str
-    normalized_name: str
-    category: Optional[str] = None
-    technique_type: Optional[str] = None
-    is_primary: bool = False
-    confidence: float
-
-
-class CitationGraphResponse(BaseModel):
-    """Citation graph structure"""
-    center: str
-    nodes: List[Dict[str, Any]]
-    edges: List[Dict[str, Any]]
-    node_count: int
-    edge_count: int
-
-
-class BatchEnrichmentRequest(BaseModel):
-    """Request for batch enrichment"""
-    papers: List[Dict[str, Any]] = Field(..., description="Papers with id, title, abstract")
-    include_citations: bool = True
-    include_code: bool = True
-    include_benchmarks: bool = True
-    include_techniques: bool = True
-
-
-# ============================================================================
-# CITATION ENDPOINTS
-# ============================================================================
-
-@router.get("/papers/{paper_id}/citations", response_model=CitationResponse)
-async def get_paper_citations(paper_id: str):
-    """
-    Get citation data for a paper from OpenAlex
-
-    - **paper_id**: arXiv paper ID (e.g., "2106.09685")
-
-    Returns citation count, reference count, and OpenAlex concepts.
-    """
-    provider = get_openalex_provider()
-
-    try:
-        info = await provider.get_citation_info(paper_id)
-
-        if not info:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No citation data found for paper {paper_id}"
-            )
-
-        return CitationResponse(
-            paper_id=info.paper_id,
-            cited_by_count=info.cited_by_count,
-            references_count=info.references_count,
-            openalex_id=info.openalex_id,
-            concepts=info.concepts
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/papers/{paper_id}/citing")
-async def get_citing_papers(
-    paper_id: str,
-    limit: int = Query(25, ge=1, le=100)
-):
-    """
-    Get papers that cite this paper
-
-    - **paper_id**: arXiv paper ID
-    - **limit**: Maximum results (1-100)
-    """
-    provider = get_openalex_provider()
-
-    try:
-        papers = await provider.get_citing_papers(paper_id, limit=limit)
-
-        return {
-            "paper_id": paper_id,
-            "citing_papers": [
-                {
-                    "arxiv_id": p.arxiv_id,
-                    "title": p.title,
-                    "cited_by_count": p.cited_by_count,
-                    "publication_date": p.publication_date
-                }
-                for p in papers
-            ],
-            "count": len(papers)
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "batch_size": 50,
+                "max_papers": 1000,
+                "skip_existing": True
+            }
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+class EnrichmentStatus(BaseModel):
+    """Current enrichment status."""
+    enabled: bool
+    is_running: bool
+    model: str
+    stats: Optional[dict] = None
 
 
-@router.get("/papers/{paper_id}/references")
-async def get_paper_references(
-    paper_id: str,
-    limit: int = Query(50, ge=1, le=100)
-):
-    """
-    Get papers that this paper references
+class EnrichmentResult(BaseModel):
+    """Result of an enrichment operation."""
+    status: str
+    message: str
+    stats: Optional[dict] = None
 
-    - **paper_id**: arXiv paper ID
-    - **limit**: Maximum results (1-100)
-    """
-    provider = get_openalex_provider()
 
-    try:
-        papers = await provider.get_references(paper_id, limit=limit)
+class DeepEnrichmentRequest(BaseModel):
+    """Request to trigger deep PDF-based enrichment."""
+    max_papers: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Maximum papers to process (None = all)"
+    )
+    priority_filter: Optional[str] = Field(
+        None,
+        description="SQL filter for priority (e.g., \"(ai_analysis->>'impactScore')::int >= 7\")"
+    )
+    skip_existing: bool = Field(
+        True,
+        description="Skip papers that already have deep_analysis"
+    )
 
-        return {
-            "paper_id": paper_id,
-            "references": [
-                {
-                    "arxiv_id": p.arxiv_id,
-                    "title": p.title,
-                    "cited_by_count": p.cited_by_count,
-                    "publication_date": p.publication_date
-                }
-                for p in papers
-            ],
-            "count": len(papers)
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "max_papers": 100,
+                "priority_filter": "(ai_analysis->>'impactScore')::int >= 7",
+                "skip_existing": True
+            }
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+class DeepEnrichmentStatus(BaseModel):
+    """Current deep enrichment status."""
+    enabled: bool
+    is_running: bool
+    model: str
+    pdf_dir: str
+    pdf_count: int
+    stats: Optional[dict] = None
 
 
-@router.get("/papers/{paper_id}/citation-graph", response_model=CitationGraphResponse)
-async def get_citation_graph(
-    paper_id: str,
-    depth: int = Query(1, ge=1, le=3),
-    max_papers: int = Query(20, ge=5, le=50)
+# ============================================================================
+# Endpoints - Tier 1 (Abstract-only)
+# ============================================================================
+
+@router.get("/status", response_model=EnrichmentStatus)
+async def get_enrichment_status():
+    """
+    Get current enrichment service status.
+
+    Returns information about:
+    - Whether enrichment is enabled (API key configured)
+    - Whether an enrichment job is currently running
+    - Statistics from the current/last run
+    """
+    service = get_enrichment_service()
+    return service.get_status()
+
+
+@router.post("/trigger", response_model=EnrichmentResult)
+async def trigger_enrichment(
+    request: EnrichmentRequest,
+    background_tasks: BackgroundTasks
 ):
     """
-    Build a citation graph around a paper
+    Trigger a batch AI enrichment job.
 
-    - **paper_id**: Center paper arXiv ID
-    - **depth**: How many hops to traverse (1-3)
-    - **max_papers**: Maximum papers to include (5-50)
+    This will process papers using Gemini 2.5 Flash Lite to generate:
+    - Structured AI analysis (summary, novelty, difficulty, etc.)
+    - Extracted GitHub/code repository URLs
 
-    Returns graph data with nodes and edges suitable for visualization.
+    The enrichment runs in the background - check /status for progress.
     """
     service = get_enrichment_service()
 
-    try:
-        graph = await service.get_citation_graph(
-            paper_id=paper_id,
-            depth=depth,
-            max_papers=max_papers
-        )
-
-        return CitationGraphResponse(**graph)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# CODE REPOSITORY ENDPOINTS
-# ============================================================================
-
-@router.get("/papers/{paper_id}/repositories", response_model=List[RepositoryResponse])
-async def get_paper_repositories(paper_id: str):
-    """
-    Get code repositories for a paper from Papers With Code
-
-    - **paper_id**: arXiv paper ID
-    """
-    provider = get_pwc_provider()
-
-    try:
-        repos = await provider.get_repositories(paper_id)
-
-        return [
-            RepositoryResponse(
-                url=r.url,
-                owner=r.owner,
-                name=r.name,
-                stars=r.stars,
-                framework=r.framework,
-                is_official=r.is_official
-            )
-            for r in repos
-        ]
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# BENCHMARK ENDPOINTS
-# ============================================================================
-
-@router.get("/papers/{paper_id}/benchmarks", response_model=List[BenchmarkResponse])
-async def get_paper_benchmarks(paper_id: str):
-    """
-    Get benchmark results for a paper from Papers With Code
-
-    - **paper_id**: arXiv paper ID
-    """
-    provider = get_pwc_provider()
-
-    try:
-        results = await provider.get_paper_results(paper_id)
-
-        return [
-            BenchmarkResponse(
-                task=r.task,
-                dataset=r.dataset,
-                metric=r.metric,
-                value=r.value,
-                model_name=r.model_name
-            )
-            for r in results
-        ]
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/sota/{task}")
-async def get_state_of_the_art(
-    task: str,
-    dataset: Optional[str] = Query(None),
-    limit: int = Query(10, ge=1, le=50)
-):
-    """
-    Get state-of-the-art results for a task
-
-    - **task**: Task name (e.g., "Image Classification")
-    - **dataset**: Optional dataset filter (e.g., "ImageNet")
-    - **limit**: Maximum results
-    """
-    provider = get_pwc_provider()
-
-    try:
-        results = await provider.get_sota_for_task(
-            task=task,
-            dataset=dataset,
-            limit=limit
-        )
-
-        return {
-            "task": task,
-            "dataset": dataset,
-            "results": [
-                {
-                    "metric": r.metric,
-                    "value": r.value,
-                    "model_name": r.model_name,
-                    "paper_title": r.paper_title,
-                    "paper_arxiv_id": r.paper_arxiv_id
-                }
-                for r in results
-            ]
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# TECHNIQUE EXTRACTION ENDPOINTS
-# ============================================================================
-
-@router.get("/papers/{paper_id}/techniques")
-async def get_paper_techniques(
-    paper_id: str,
-    title: str = Query(..., description="Paper title"),
-    abstract: str = Query(..., description="Paper abstract")
-):
-    """
-    Extract techniques from a paper
-
-    - **paper_id**: arXiv paper ID
-    - **title**: Paper title
-    - **abstract**: Paper abstract
-
-    Uses LLM extraction when available, with heuristic fallback.
-    """
-    service = get_technique_extraction_service()
-
-    try:
-        result = await service.extract_techniques(
-            paper_id=paper_id,
-            title=title,
-            abstract=abstract
-        )
-
-        return {
-            "paper_id": result.paper_id,
-            "techniques": [
-                {
-                    "name": t.name,
-                    "normalized_name": t.normalized_name,
-                    "category": t.category,
-                    "technique_type": t.technique_type,
-                    "is_primary": t.is_primary,
-                    "confidence": t.confidence
-                }
-                for t in result.techniques
-            ],
-            "architecture_type": result.architecture_type,
-            "task_domains": result.task_domains,
-            "novelty_type": result.novelty_type,
-            "key_components": result.key_components,
-            "extraction_method": result.extraction_method
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/papers/{paper_id}/techniques")
-async def extract_techniques_from_body(
-    paper_id: str,
-    paper_data: Dict[str, Any] = Body(...)
-):
-    """
-    Extract techniques from a paper (POST version for long abstracts)
-
-    Body should contain:
-    - **title**: Paper title
-    - **abstract**: Paper abstract
-    """
-    service = get_technique_extraction_service()
-
-    title = paper_data.get("title", "")
-    abstract = paper_data.get("abstract", paper_data.get("summary", ""))
-
-    if not title or not abstract:
+    if not service.enabled:
         raise HTTPException(
-            status_code=400,
-            detail="Both title and abstract are required"
+            status_code=503,
+            detail="Enrichment service not enabled. Set GOOGLE_API_KEY."
         )
 
-    try:
-        result = await service.extract_techniques(
-            paper_id=paper_id,
-            title=title,
-            abstract=abstract
+    if service.is_running:
+        return EnrichmentResult(
+            status="already_running",
+            message="Enrichment is already in progress. Check /status for updates.",
+            stats=service.get_status().get("stats")
         )
 
-        return {
-            "paper_id": result.paper_id,
-            "techniques": [t.model_dump() for t in result.techniques],
-            "architecture_type": result.architecture_type,
-            "task_domains": result.task_domains,
-            "novelty_type": result.novelty_type,
-            "key_components": result.key_components,
-            "extraction_method": result.extraction_method
-        }
+    # Run enrichment in background
+    async def run_background_enrichment():
+        await service.run_enrichment(
+            batch_size=request.batch_size,
+            max_papers=request.max_papers,
+            skip_existing=request.skip_existing,
+        )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    background_tasks.add_task(run_background_enrichment)
+
+    return EnrichmentResult(
+        status="started",
+        message=f"Enrichment started with batch_size={request.batch_size}. "
+                "Check /enrichment/status for progress."
+    )
 
 
-# ============================================================================
-# FULL ENRICHMENT ENDPOINTS
-# ============================================================================
+@router.post("/stop", response_model=EnrichmentResult)
+async def stop_enrichment():
+    """
+    Stop the current enrichment job after the current batch completes.
+    """
+    service = get_enrichment_service()
 
-@router.get("/papers/{paper_id}/enrich")
-async def enrich_paper(
-    paper_id: str,
-    title: str = Query(...),
-    abstract: str = Query(...),
-    include_citations: bool = Query(True),
-    include_code: bool = Query(True),
-    include_benchmarks: bool = Query(True),
-    include_techniques: bool = Query(True)
+    if not service.is_running:
+        return EnrichmentResult(
+            status="not_running",
+            message="No enrichment job is currently running."
+        )
+
+    service.stop()
+    return EnrichmentResult(
+        status="stopping",
+        message="Stop requested. Will finish current batch and stop."
+    )
+
+
+@router.post("/paper/{paper_id}", response_model=EnrichmentResult)
+async def enrich_single_paper(paper_id: str):
+    """
+    Enrich a single paper by ID.
+
+    Useful for testing or on-demand enrichment.
+    """
+    service = get_enrichment_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Enrichment service not enabled. Set GOOGLE_API_KEY."
+        )
+
+    analysis = await service.enrich_single_paper(paper_id)
+
+    if analysis:
+        return EnrichmentResult(
+            status="success",
+            message=f"Paper {paper_id} enriched successfully.",
+            stats={"analysis_fields": list(analysis.keys())}
+        )
+    else:
+        return EnrichmentResult(
+            status="failed",
+            message=f"Could not enrich paper {paper_id}. It may not exist or analysis failed."
+        )
+
+
+@router.get("/count")
+async def get_enrichment_count():
+    """
+    Get count of enriched vs unenriched papers in the database.
+    """
+    from app.db.database import database
+
+    total_query = "SELECT COUNT(*) FROM papers"
+    enriched_query = "SELECT COUNT(*) FROM papers WHERE ai_analysis IS NOT NULL"
+
+    total_result = await database.fetch_one(total_query)
+    enriched_result = await database.fetch_one(enriched_query)
+
+    total = total_result[0] if total_result else 0
+    enriched = enriched_result[0] if enriched_result else 0
+    remaining = total - enriched
+
+    return {
+        "total_papers": total,
+        "enriched": enriched,
+        "remaining": remaining,
+        "percent_complete": round(100.0 * enriched / total, 1) if total > 0 else 0
+    }
+
+
+@router.get("/test")
+async def test_enrichment(
+    limit: int = Query(5, ge=1, le=20, description="Number of papers to test with")
 ):
     """
-    Fully enrich a paper with all available data
+    Test enrichment on a small sample without saving to database.
 
-    Combines:
-    - Citation data from OpenAlex
-    - Code repositories from Papers With Code
-    - Benchmark results from Papers With Code
-    - Extracted techniques
-
-    - **paper_id**: arXiv paper ID
-    - **title**: Paper title
-    - **abstract**: Paper abstract
+    Useful for verifying the service is working before running full batch.
     """
     service = get_enrichment_service()
 
-    try:
-        enriched = await service.enrich_paper(
-            paper_id=paper_id,
-            title=title,
-            abstract=abstract,
-            include_citations=include_citations,
-            include_code=include_code,
-            include_benchmarks=include_benchmarks,
-            include_techniques=include_techniques
-        )
-
-        return enriched.model_dump()
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/papers/batch-enrich")
-async def batch_enrich_papers(request: BatchEnrichmentRequest = Body(...)):
-    """
-    Enrich multiple papers at once
-
-    More efficient than individual requests due to concurrent processing.
-
-    Body:
-    - **papers**: List of papers with id, title, abstract
-    - **include_***: Which enrichment types to include
-    """
-    service = get_enrichment_service()
-
-    if len(request.papers) > 20:
+    if not service.enabled:
         raise HTTPException(
-            status_code=400,
-            detail="Maximum 20 papers per batch"
+            status_code=503,
+            detail="Enrichment service not enabled. Set GOOGLE_API_KEY."
         )
 
-    try:
-        results = await service.batch_enrich_papers(
-            papers=request.papers,
-            include_citations=request.include_citations,
-            include_code=request.include_code,
-            include_benchmarks=request.include_benchmarks,
-            include_techniques=request.include_techniques
+    from app.db.database import database
+
+    # Fetch sample papers
+    query = """
+        SELECT id, title, abstract
+        FROM papers
+        WHERE ai_analysis IS NULL
+        ORDER BY published_date DESC
+        LIMIT :limit
+    """
+    papers = await database.fetch_all(query, {"limit": limit})
+
+    if not papers:
+        return {"status": "no_papers", "message": "No papers without analysis found"}
+
+    results = []
+    for paper in papers:
+        # Extract code URLs
+        code_repos = service.extract_code_urls(paper["abstract"])
+
+        # Test analysis (don't save)
+        analysis = await service._analyze_paper(paper["title"], paper["abstract"])
+
+        results.append({
+            "id": paper["id"],
+            "title": paper["title"][:80] + "..." if len(paper["title"]) > 80 else paper["title"],
+            "code_repos": code_repos,
+            "analysis_success": analysis is not None,
+            "analysis_preview": {
+                k: v for k, v in (analysis or {}).items()
+                if k in ["impactScore", "difficultyLevel", "hasCode", "researchSignificance"]
+            } if analysis else None
+        })
+
+    return {
+        "status": "ok",
+        "tested": len(results),
+        "with_code_repos": sum(1 for r in results if r["code_repos"]),
+        "analysis_success_rate": sum(1 for r in results if r["analysis_success"]) / len(results) * 100,
+        "results": results
+    }
+
+
+# ============================================================================
+# Endpoints - Tier 2 (Deep PDF-based enrichment)
+# ============================================================================
+
+@router.get("/deep/status", response_model=DeepEnrichmentStatus)
+async def get_deep_enrichment_status():
+    """
+    Get current deep enrichment service status.
+
+    Returns information about:
+    - Whether deep enrichment is enabled (API key + PDFs available)
+    - Whether a deep enrichment job is currently running
+    - PDF directory and count
+    - Statistics from the current/last run
+    """
+    service = get_deep_enrichment_service()
+    return service.get_status()
+
+
+@router.post("/deep/trigger", response_model=EnrichmentResult)
+async def trigger_deep_enrichment(
+    request: DeepEnrichmentRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Trigger a deep PDF-based enrichment job (Tier 2).
+
+    This uses Gemini 2.0 Flash multimodal to analyze full paper PDFs:
+    - Full methodology understanding
+    - Figure and table analysis
+    - Experimental results extraction
+    - Architecture diagram interpretation
+
+    Processing is slower (~1 paper/second) but much richer analysis.
+    Runs in the background - check /deep/status for progress.
+    """
+    service = get_deep_enrichment_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Deep enrichment service not enabled. Check GOOGLE_API_KEY and PDF directory."
         )
 
-        return {
-            "enriched": {
-                paper_id: enriched.model_dump()
-                for paper_id, enriched in results.items()
-            },
-            "count": len(results)
+    if service.is_running:
+        return EnrichmentResult(
+            status="already_running",
+            message="Deep enrichment is already in progress. Check /deep/status for updates.",
+            stats=service.get_status().get("stats")
+        )
+
+    # Run enrichment in background
+    async def run_background_deep_enrichment():
+        await service.run_deep_enrichment(
+            max_papers=request.max_papers,
+            priority_filter=request.priority_filter,
+            skip_existing=request.skip_existing,
+        )
+
+    background_tasks.add_task(run_background_deep_enrichment)
+
+    return EnrichmentResult(
+        status="started",
+        message="Deep enrichment started. Check /enrichment/deep/status for progress."
+    )
+
+
+@router.post("/deep/stop", response_model=EnrichmentResult)
+async def stop_deep_enrichment():
+    """
+    Stop the current deep enrichment job after the current paper completes.
+    """
+    service = get_deep_enrichment_service()
+
+    if not service.is_running:
+        return EnrichmentResult(
+            status="not_running",
+            message="No deep enrichment job is currently running."
+        )
+
+    service.stop()
+    return EnrichmentResult(
+        status="stopping",
+        message="Stop requested. Will finish current paper and stop."
+    )
+
+
+@router.post("/deep/paper/{paper_id}", response_model=EnrichmentResult)
+async def deep_enrich_single_paper(paper_id: str):
+    """
+    Deep enrich a single paper by ID using PDF analysis.
+
+    Useful for testing or on-demand deep enrichment.
+    Requires the PDF to be available in the PDF directory.
+    """
+    service = get_deep_enrichment_service()
+
+    if not service.enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Deep enrichment service not enabled. Check GOOGLE_API_KEY and PDF directory."
+        )
+
+    analysis = await service.enrich_single_paper(paper_id)
+
+    if analysis:
+        return EnrichmentResult(
+            status="success",
+            message=f"Paper {paper_id} deep enriched successfully.",
+            stats={
+                "analysis_fields": list(analysis.keys()),
+                "has_figures": bool(analysis.get("figures_analysis")),
+                "has_methodology": bool(analysis.get("methodology")),
+            }
+        )
+    else:
+        return EnrichmentResult(
+            status="failed",
+            message=f"Could not deep enrich paper {paper_id}. PDF may not exist or analysis failed."
+        )
+
+
+@router.get("/deep/count")
+async def get_deep_enrichment_count():
+    """
+    Get count of deep enriched vs non-enriched papers in the database.
+    """
+    from app.db.database import database
+
+    total_query = "SELECT COUNT(*) FROM papers"
+    deep_enriched_query = "SELECT COUNT(*) FROM papers WHERE deep_analysis IS NOT NULL"
+    has_pdf_query = """
+        SELECT COUNT(*) FROM papers
+        WHERE deep_analysis IS NULL
+        AND ai_analysis IS NOT NULL
+    """
+
+    total_result = await database.fetch_one(total_query)
+    deep_result = await database.fetch_one(deep_enriched_query)
+    pending_result = await database.fetch_one(has_pdf_query)
+
+    total = total_result[0] if total_result else 0
+    deep_enriched = deep_result[0] if deep_result else 0
+    pending = pending_result[0] if pending_result else 0
+
+    return {
+        "total_papers": total,
+        "deep_enriched": deep_enriched,
+        "pending_deep_enrichment": pending,
+        "percent_complete": round(100.0 * deep_enriched / total, 1) if total > 0 else 0
+    }
+
+
+# ============================================================================
+# Endpoints - Citation Enrichment (OpenAlex)
+# ============================================================================
+
+class CitationEnrichmentRequest(BaseModel):
+    """Request to trigger citation enrichment."""
+    max_papers: Optional[int] = Field(
+        None,
+        ge=1,
+        description="Maximum papers to process (None = all)"
+    )
+    skip_enriched: bool = Field(
+        True,
+        description="Skip papers that already have citation_count > 0"
+    )
+    oldest_first: bool = Field(
+        True,
+        description="Process oldest papers first (better OpenAlex coverage for papers with time to accumulate citations)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "max_papers": 1000,
+                "skip_enriched": True
+            }
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/citations/status")
+async def get_citation_enrichment_status():
+    """
+    Get current citation enrichment service status.
+
+    Returns information about:
+    - Whether citation enrichment is running
+    - Statistics from the current/last run
+    """
+    from app.services.citation_enrichment_service import get_citation_enrichment_service
+    service = get_citation_enrichment_service()
+    return service.get_status()
+
+
+@router.post("/citations/trigger", response_model=EnrichmentResult)
+async def trigger_citation_enrichment(
+    request: CitationEnrichmentRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Trigger citation enrichment from OpenAlex.
+
+    This will:
+    - Fetch citation counts for each paper from OpenAlex
+    - Update papers.citation_count with real citation data
+    - Enable citation-based ranking and discovery
+
+    OpenAlex is free and doesn't require an API key.
+    Processing is ~100 papers/minute to respect rate limits.
+    """
+    from app.services.citation_enrichment_service import get_citation_enrichment_service
+    service = get_citation_enrichment_service()
+
+    if service.is_running:
+        return EnrichmentResult(
+            status="already_running",
+            message="Citation enrichment is already in progress. Check /citations/status for updates.",
+            stats=service.get_status().get("stats")
+        )
+
+    async def run_background_citation_enrichment():
+        await service.run_citation_enrichment(
+            max_papers=request.max_papers,
+            skip_enriched=request.skip_enriched,
+            oldest_first=request.oldest_first,
+        )
+
+    background_tasks.add_task(run_background_citation_enrichment)
+
+    return EnrichmentResult(
+        status="started",
+        message="Citation enrichment started. Check /enrichment/citations/status for progress."
+    )
+
+
+@router.post("/citations/stop", response_model=EnrichmentResult)
+async def stop_citation_enrichment():
+    """
+    Stop the current citation enrichment job after the current batch completes.
+    """
+    from app.services.citation_enrichment_service import get_citation_enrichment_service
+    service = get_citation_enrichment_service()
+
+    if not service.is_running:
+        return EnrichmentResult(
+            status="not_running",
+            message="No citation enrichment job is currently running."
+        )
+
+    service.stop()
+    return EnrichmentResult(
+        status="stopping",
+        message="Stop requested. Will finish current batch and stop."
+    )
+
+
+@router.post("/citations/trigger-prioritized", response_model=EnrichmentResult)
+async def trigger_prioritized_citation_enrichment(
+    max_papers: Optional[int] = Query(
+        None,
+        description="Maximum papers to process (None = all)"
+    ),
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Trigger PRIORITIZED citation enrichment from Semantic Scholar.
+
+    This is ideal for slow API rate limits (public API = 30s/request).
+    Papers are processed in priority order:
+
+    1. **deep_analysis papers** - Papers we've already invested in with PDF analysis
+    2. **High quality papers** - Papers with quality_score > 50
+    3. **Recent papers** - Papers from the last 90 days
+    4. **Everything else** - Remaining papers by date
+
+    At 30s per request, we process ~2,880 papers/day.
+    This ensures the most valuable papers get citation data first while
+    waiting for an API key.
+
+    Use /enrichment/citations/status to monitor progress.
+    """
+    from app.services.citation_enrichment_service import get_citation_enrichment_service
+    service = get_citation_enrichment_service()
+
+    if service.is_running:
+        return EnrichmentResult(
+            status="already_running",
+            message="Citation enrichment is already in progress. Check /citations/status for updates.",
+            stats=service.get_status().get("stats")
+        )
+
+    async def run_background_prioritized_enrichment():
+        await service.run_prioritized_enrichment(max_papers=max_papers)
+
+    background_tasks.add_task(run_background_prioritized_enrichment)
+
+    estimate_hours = (max_papers or 27000) * 30 / 3600
+    return EnrichmentResult(
+        status="started",
+        message=f"Prioritized citation enrichment started. Processing most valuable papers first. "
+                f"Estimated time: ~{estimate_hours:.1f} hours for {max_papers or 'all'} papers at public API rate. "
+                f"Check /enrichment/citations/status for progress."
+    )
+
+
+@router.post("/citations/paper/{paper_id}", response_model=EnrichmentResult)
+async def enrich_single_paper_citations(paper_id: str):
+    """
+    Fetch citation data for a single paper from OpenAlex.
+
+    Returns the paper's citation info including:
+    - Total citation count
+    - OpenAlex ID
+    - Related concepts
+    """
+    from app.services.citation_enrichment_service import get_citation_enrichment_service
+    service = get_citation_enrichment_service()
+
+    result = await service.enrich_single_paper(paper_id)
+
+    if result:
+        return EnrichmentResult(
+            status="success",
+            message=f"Paper {paper_id} citation data fetched successfully.",
+            stats=result
+        )
+    else:
+        return EnrichmentResult(
+            status="not_found",
+            message=f"Paper {paper_id} not found in OpenAlex. May be too new or not indexed."
+        )
+
+
+@router.get("/citations/count")
+async def get_citation_enrichment_count():
+    """
+    Get count of papers with citation data vs without.
+    """
+    from app.db.database import database
+
+    total_query = "SELECT COUNT(*) FROM papers"
+    has_citations_query = "SELECT COUNT(*) FROM papers WHERE citation_count > 0"
+    total_citations_query = "SELECT SUM(citation_count) FROM papers"
+
+    total_result = await database.fetch_one(total_query)
+    has_citations_result = await database.fetch_one(has_citations_query)
+    total_citations_result = await database.fetch_one(total_citations_query)
+
+    total = total_result[0] if total_result else 0
+    has_citations = has_citations_result[0] if has_citations_result else 0
+    total_citations = total_citations_result[0] if total_citations_result and total_citations_result[0] else 0
+
+    return {
+        "total_papers": total,
+        "papers_with_citations": has_citations,
+        "papers_without_citations": total - has_citations,
+        "total_citations": total_citations,
+        "percent_complete": round(100.0 * has_citations / total, 1) if total > 0 else 0
+    }
+
+
+@router.get("/citations/top")
+async def get_top_cited_papers(
+    limit: int = Query(default=20, ge=1, le=100),
+    category: Optional[str] = Query(default=None)
+):
+    """
+    Get top cited papers in the database.
+
+    Useful for finding influential/foundational papers.
+    """
+    from app.db.database import database
+
+    params = {"limit": limit}
+    category_filter = ""
+    if category:
+        category_filter = "AND category = :category"
+        params["category"] = category
+
+    query = f"""
+        SELECT
+            id,
+            title,
+            category,
+            citation_count,
+            published_date
+        FROM papers
+        WHERE citation_count > 0
+        {category_filter}
+        ORDER BY citation_count DESC
+        LIMIT :limit
+    """
+
+    rows = await database.fetch_all(query, params)
+
+    return {
+        "papers": [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "category": row["category"],
+                "citation_count": row["citation_count"],
+                "published": row["published_date"].isoformat() if row["published_date"] else None,
+            }
+            for row in rows
+        ],
+        "total": len(rows)
+    }
