@@ -1,6 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+"use client";
+
+import React, { useEffect, useRef, useState } from 'react';
 import { Paper } from '../types/Paper';
 import SmartBadges from './SmartBadges';
+import KnowledgeGraph from './KnowledgeGraph';
 
 interface PaperDetailModalProps {
   paper: Paper;
@@ -10,6 +13,7 @@ interface PaperDetailModalProps {
 
 const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onClose }) => {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [showCitationGraph, setShowCitationGraph] = useState(false);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -34,6 +38,13 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
       document.body.style.overflow = 'unset';
     };
   }, [isOpen, onClose]);
+
+  // Reset citation graph state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setShowCitationGraph(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -164,11 +175,47 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
             </section>
           </div>
 
+          <section className="insight-section citation-graph-section">
+            <h3
+              className="citation-graph-toggle"
+              onClick={() => setShowCitationGraph(!showCitationGraph)}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <span style={{
+                display: 'inline-block',
+                transform: showCitationGraph ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease'
+              }}>
+                &#9654;
+              </span>
+              Citation Network
+              <span style={{
+                fontSize: '0.8rem',
+                color: '#64748b',
+                fontWeight: 'normal'
+              }}>
+                {showCitationGraph ? '(click to collapse)' : '(click to expand)'}
+              </span>
+            </h3>
+            {showCitationGraph && (
+              <div className="citation-graph-container" style={{ marginTop: '16px' }}>
+                <KnowledgeGraph
+                  paperId={paper.id}
+                  apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}
+                  width={700}
+                  height={500}
+                  depth={1}
+                  maxPapers={15}
+                />
+              </div>
+            )}
+          </section>
+
           <div className="modal-actions">
-            <a 
-              href={paper.link} 
-              target="_blank" 
-              rel="noopener noreferrer" 
+            <a
+              href={paper.link}
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn btn-primary"
             >
               Read Full Paper

@@ -31,16 +31,40 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   if (backendBase) {
     try {
-      const params = searchParams.toString();
-      const response = await fetch(`${backendBase}/papers/atlas/papers?${params}`);
-      const payload = await response.json();
-      return NextResponse.json(payload, { status: response.status });
+      // Build query params for the database API
+      const limit = searchParams.get('limit') || '40';
+      const query = searchParams.get('query') || '';
+      const category = searchParams.get('category') || 'all';
+      const days = searchParams.get('days') || '';
+
+      const params = new URLSearchParams({ limit });
+      if (query) params.set('query', query);
+      if (category && category !== 'all') params.set('category', category);
+      if (days && parseInt(days) > 0) params.set('days', days);
+
+      const response = await fetch(`${backendBase}/atlas-db/papers?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+
+      // Transform to match expected frontend format
+      const papers = data.papers.map((p: Record<string, unknown>) => ({
+        id: p.id,
+        title: p.title,
+        abstract: p.abstract,
+        authors: p.authors,
+        published: p.published,
+        category: p.category,
+        link: p.link,
+        concepts: p.concepts || [],
+      }));
+
+      return NextResponse.json({ papers }, { status: 200 });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json(
-        { error: `Failed to fetch atlas papers: ${message}` },
-        { status: 502 },
-      );
+      console.error('Backend fetch failed, falling back to file:', message);
+      // Fall through to file-based approach
     }
   }
 

@@ -54,7 +54,7 @@ export default function GeneratePage() {
 
     try {
       const endpoint = apiBaseUrl
-        ? `${apiBaseUrl}/papers?query=${encodeURIComponent(searchQuery)}&limit=10`
+        ? `${apiBaseUrl}/atlas-db/papers?query=${encodeURIComponent(searchQuery)}&limit=10`
         : `/api/atlas/papers?query=${encodeURIComponent(searchQuery)}&limit=10`;
 
       const response = await fetch(endpoint);

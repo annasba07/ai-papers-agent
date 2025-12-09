@@ -56,7 +56,7 @@ const SectionNav = () => (
 export default function Home() {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filterDays] = useState('7');
+  const [filterDays] = useState('90');
   const [filterCategory, setFilterCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
@@ -79,9 +79,9 @@ export default function Home() {
           category: filterCategory,
           query: searchQuery,
         });
-        const endpoint = apiBaseUrl
-          ? `${apiBaseUrl}/papers?${params.toString()}`
-          : `/api/atlas/papers?${params.toString()}`;
+        // Use Next.js API routes which proxy to the backend
+        // This avoids CORS issues and ensures consistent endpoint handling
+        const endpoint = `/api/atlas/papers?${params.toString()}`;
 
         const response = await fetch(endpoint);
         if (!response.ok) {

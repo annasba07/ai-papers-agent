@@ -12,15 +12,38 @@ const backendBase = rawBase.replace(/\/$/, '');
 export async function GET() {
   if (backendBase) {
     try {
-      const response = await fetch(`${backendBase}/papers/atlas/summary`);
-      const payload = await response.json();
-      return NextResponse.json(payload, { status: response.status });
+      // Try the new database-backed endpoint first
+      const response = await fetch(`${backendBase}/atlas-db/summary`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+
+      // Transform the response to match the expected frontend format
+      const payload = {
+        stats: {
+          unique_papers: data.total_papers,
+          input_files: data.total_papers, // Use paper count as proxy
+          categories: data.categories.map((c: { category: string }) => c.category),
+          output_catalog: 'database',
+          output_timeline: 'database',
+          output_authors: 'database',
+        },
+        topCategories: data.categories.slice(0, 10).map((c: { category: string; count: number }) => ({
+          category: c.category,
+          total: c.count,
+        })),
+        topAuthors: data.top_authors || [], // Include if available from database
+        timeline: {}, // Not yet available from database
+        topConcepts: data.top_concepts,
+        dateRange: data.date_range,
+      };
+
+      return NextResponse.json(payload, { status: 200 });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      return NextResponse.json(
-        { error: `Failed to load atlas summary: ${message}` },
-        { status: 502 },
-      );
+      console.error('Backend fetch failed, falling back to file:', message);
+      // Fall through to file-based approach
     }
   }
 
