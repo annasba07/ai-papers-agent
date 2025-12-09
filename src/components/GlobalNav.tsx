@@ -6,9 +6,10 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/", label: "Home", icon: "home" },
+  { href: "/discovery", label: "Discovery", icon: "radar", isNew: true },
   { href: "/trends", label: "Trends", icon: "trending" },
   { href: "/atlas-explore", label: "Atlas", icon: "explore" },
-  { href: "/generate", label: "Code Gen", icon: "code", isNew: true },
+  { href: "/generate", label: "Code Gen", icon: "code" },
 ];
 
 const icons: Record<string, JSX.Element> = {
@@ -16,6 +17,14 @@ const icons: Record<string, JSX.Element> = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  ),
+  radar: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
     </svg>
   ),
   trending: (
