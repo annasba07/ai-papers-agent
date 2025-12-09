@@ -95,6 +95,19 @@ interface ReproduciblePaper {
   has_code: boolean;
 }
 
+interface PracticalPaper {
+  id: string;
+  title: string;
+  category: string;
+  industry_relevance: string;
+  impact_score: number;
+  use_cases: string[];
+  scalability: string | null;
+  deployment_considerations: string | null;
+  limitations: string[];
+  ai_practical_score: string | null;
+}
+
 // Animated number counter
 const AnimatedNumber = ({ value, duration = 1200 }: { value: number; duration?: number }) => {
   const [displayValue, setDisplayValue] = useState(0);
@@ -248,11 +261,13 @@ export default function DiscoveryPage() {
   const [techniques, setTechniques] = useState<TechniquePaper[]>([]);
   const [techniqueDistribution, setTechniqueDistribution] = useState<Record<string, number>>({});
   const [reproducible, setReproducible] = useState<ReproduciblePaper[]>([]);
-  const [activeTab, setActiveTab] = useState<'impact' | 'tldr' | 'learning' | 'techniques' | 'reproducibility'>('impact');
+  const [practical, setPractical] = useState<PracticalPaper[]>([]);
+  const [activeTab, setActiveTab] = useState<'impact' | 'tldr' | 'learning' | 'techniques' | 'reproducibility' | 'practical'>('impact');
   const [loading, setLoading] = useState(true);
   const [minImpact, setMinImpact] = useState(7);
   const [selectedNoveltyType, setSelectedNoveltyType] = useState<string | null>(null);
   const [minReproducibility, setMinReproducibility] = useState(7);
+  const [industryRelevance, setIndustryRelevance] = useState<'high' | 'medium' | 'low'>('high');
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -264,13 +279,14 @@ export default function DiscoveryPage() {
           ? `${API_BASE}/discovery/techniques?novelty_type=${selectedNoveltyType}&limit=12`
           : `${API_BASE}/discovery/techniques?limit=12`;
 
-        const [statsRes, impactRes, tldrRes, learningRes, techniquesRes, reproducibleRes] = await Promise.all([
+        const [statsRes, impactRes, tldrRes, learningRes, techniquesRes, reproducibleRes, practicalRes] = await Promise.all([
           fetch(`${API_BASE}/discovery/stats`),
           fetch(`${API_BASE}/discovery/impact?min_score=${minImpact}&limit=12`),
           fetch(`${API_BASE}/discovery/tldr?limit=8`),
           fetch(`${API_BASE}/discovery/learning-path?limit_per_level=4`),
           fetch(techniqueUrl),
           fetch(`${API_BASE}/discovery/reproducible?min_reproducibility=${minReproducibility}&limit=12`),
+          fetch(`${API_BASE}/discovery/practical?industry_relevance=${industryRelevance}&limit=12`),
         ]);
 
         if (statsRes.ok) {
@@ -298,6 +314,10 @@ export default function DiscoveryPage() {
           const data = await reproducibleRes.json();
           setReproducible(data.papers);
         }
+        if (practicalRes.ok) {
+          const data = await practicalRes.json();
+          setPractical(data.papers);
+        }
       } catch (err) {
         console.error('Failed to fetch discovery data:', err);
       } finally {
@@ -306,7 +326,7 @@ export default function DiscoveryPage() {
     };
 
     fetchAll();
-  }, [API_BASE, minImpact, selectedNoveltyType, minReproducibility]);
+  }, [API_BASE, minImpact, selectedNoveltyType, minReproducibility, industryRelevance]);
 
   // Calculate impact distribution for visualization
   const impactDistribution = stats?.distributions.impact_scores || {};
@@ -477,6 +497,17 @@ export default function DiscoveryPage() {
               <path d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
             </svg>
             Reproducibility
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'practical'}
+            className={`discovery-tab ${activeTab === 'practical' ? 'discovery-tab--active' : ''}`}
+            onClick={() => setActiveTab('practical')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" />
+            </svg>
+            Practical
           </button>
         </nav>
 
@@ -725,6 +756,99 @@ export default function DiscoveryPage() {
                             <div className="repro-card__dataset-list">
                               {paper.datasets_mentioned.slice(0, 3).map((ds, i) => (
                                 <span key={i} className="repro-card__dataset">{ds}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Practical tab */}
+              {activeTab === 'practical' && (
+                <section className="tab-panel" aria-label="Practical applications">
+                  <header className="tab-panel__header">
+                    <h2>Practical Applications</h2>
+                    <span className="tab-panel__count">Papers ready for real-world deployment</span>
+                  </header>
+
+                  {/* Industry relevance filter */}
+                  <div className="practical-filter">
+                    <span className="practical-filter__label">Industry Relevance:</span>
+                    <div className="practical-filter__buttons">
+                      {(['high', 'medium', 'low'] as const).map((level) => (
+                        <button
+                          key={level}
+                          className={`practical-level-btn ${industryRelevance === level ? 'practical-level-btn--active' : ''}`}
+                          onClick={() => setIndustryRelevance(level)}
+                        >
+                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="practical-grid">
+                    {practical.map((paper) => (
+                      <article key={paper.id} className="practical-card">
+                        <header className="practical-card__header">
+                          <div className="practical-card__score">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" />
+                            </svg>
+                            <span>{paper.impact_score}/10</span>
+                          </div>
+                          <div className="practical-card__badges">
+                            <span className={`practical-badge practical-badge--${paper.industry_relevance}`}>
+                              {paper.industry_relevance} relevance
+                            </span>
+                            {paper.ai_practical_score && (
+                              <span className="practical-badge practical-badge--score">
+                                {paper.ai_practical_score}
+                              </span>
+                            )}
+                          </div>
+                        </header>
+
+                        <h3 className="practical-card__title">
+                          <Link href={`https://arxiv.org/abs/${paper.id.split('v')[0]}`} target="_blank">
+                            {paper.title}
+                          </Link>
+                        </h3>
+
+                        {paper.use_cases && paper.use_cases.length > 0 && (
+                          <div className="practical-card__usecases">
+                            <span className="practical-card__label">Use Cases:</span>
+                            <ul>
+                              {paper.use_cases.slice(0, 3).map((useCase, i) => (
+                                <li key={i}>{useCase}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {paper.scalability && (
+                          <div className="practical-card__scalability">
+                            <span className="practical-card__label">Scalability:</span>
+                            <p>{paper.scalability.slice(0, 150)}{paper.scalability.length > 150 ? '...' : ''}</p>
+                          </div>
+                        )}
+
+                        {paper.deployment_considerations && (
+                          <div className="practical-card__deployment">
+                            <span className="practical-card__label">Deployment:</span>
+                            <p>{paper.deployment_considerations.slice(0, 150)}{paper.deployment_considerations.length > 150 ? '...' : ''}</p>
+                          </div>
+                        )}
+
+                        {paper.limitations && paper.limitations.length > 0 && (
+                          <div className="practical-card__limitations">
+                            <span className="practical-card__label">Limitations:</span>
+                            <div className="practical-card__limitation-list">
+                              {paper.limitations.slice(0, 2).map((lim, i) => (
+                                <span key={i} className="practical-card__limitation">{lim}</span>
                               ))}
                             </div>
                           </div>
