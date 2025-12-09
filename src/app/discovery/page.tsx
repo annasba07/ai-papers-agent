@@ -68,6 +68,33 @@ interface LearningPathResponse {
   path: LearningPathLevel[];
 }
 
+interface TechniquePaper {
+  id: string;
+  title: string;
+  novelty_type: string | null;
+  novelty_description: string | null;
+  methodology_approach: string | null;
+  key_components: string[];
+  architecture: string | null;
+}
+
+interface TechniqueResponse {
+  papers: TechniquePaper[];
+  total: number;
+  novelty_type_distribution?: Record<string, number>;
+}
+
+interface ReproduciblePaper {
+  id: string;
+  title: string;
+  reproducibility_score: number;
+  code_availability: string | null;
+  implementation_detail: string | null;
+  github_urls: string[];
+  datasets_mentioned: string[];
+  has_code: boolean;
+}
+
 // Animated number counter
 const AnimatedNumber = ({ value, duration = 1200 }: { value: number; duration?: number }) => {
   const [displayValue, setDisplayValue] = useState(0);
@@ -218,9 +245,14 @@ export default function DiscoveryPage() {
   const [impactPapers, setImpactPapers] = useState<DiscoveryPaper[]>([]);
   const [tldrPapers, setTldrPapers] = useState<DiscoveryPaper[]>([]);
   const [learningPath, setLearningPath] = useState<LearningPathResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<'impact' | 'tldr' | 'learning'>('impact');
+  const [techniques, setTechniques] = useState<TechniquePaper[]>([]);
+  const [techniqueDistribution, setTechniqueDistribution] = useState<Record<string, number>>({});
+  const [reproducible, setReproducible] = useState<ReproduciblePaper[]>([]);
+  const [activeTab, setActiveTab] = useState<'impact' | 'tldr' | 'learning' | 'techniques' | 'reproducibility'>('impact');
   const [loading, setLoading] = useState(true);
   const [minImpact, setMinImpact] = useState(7);
+  const [selectedNoveltyType, setSelectedNoveltyType] = useState<string | null>(null);
+  const [minReproducibility, setMinReproducibility] = useState(7);
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -228,11 +260,17 @@ export default function DiscoveryPage() {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [statsRes, impactRes, tldrRes, learningRes] = await Promise.all([
+        const techniqueUrl = selectedNoveltyType
+          ? `${API_BASE}/discovery/techniques?novelty_type=${selectedNoveltyType}&limit=12`
+          : `${API_BASE}/discovery/techniques?limit=12`;
+
+        const [statsRes, impactRes, tldrRes, learningRes, techniquesRes, reproducibleRes] = await Promise.all([
           fetch(`${API_BASE}/discovery/stats`),
           fetch(`${API_BASE}/discovery/impact?min_score=${minImpact}&limit=12`),
           fetch(`${API_BASE}/discovery/tldr?limit=8`),
           fetch(`${API_BASE}/discovery/learning-path?limit_per_level=4`),
+          fetch(techniqueUrl),
+          fetch(`${API_BASE}/discovery/reproducible?min_reproducibility=${minReproducibility}&limit=12`),
         ]);
 
         if (statsRes.ok) {
@@ -251,6 +289,15 @@ export default function DiscoveryPage() {
           const data: LearningPathResponse = await learningRes.json();
           setLearningPath(data);
         }
+        if (techniquesRes.ok) {
+          const data: TechniqueResponse = await techniquesRes.json();
+          setTechniques(data.papers);
+          setTechniqueDistribution(data.novelty_type_distribution || {});
+        }
+        if (reproducibleRes.ok) {
+          const data = await reproducibleRes.json();
+          setReproducible(data.papers);
+        }
       } catch (err) {
         console.error('Failed to fetch discovery data:', err);
       } finally {
@@ -259,7 +306,7 @@ export default function DiscoveryPage() {
     };
 
     fetchAll();
-  }, [API_BASE, minImpact]);
+  }, [API_BASE, minImpact, selectedNoveltyType, minReproducibility]);
 
   // Calculate impact distribution for visualization
   const impactDistribution = stats?.distributions.impact_scores || {};
@@ -408,6 +455,29 @@ export default function DiscoveryPage() {
             </svg>
             Learning Paths
           </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'techniques'}
+            className={`discovery-tab ${activeTab === 'techniques' ? 'discovery-tab--active' : ''}`}
+            onClick={() => setActiveTab('techniques')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+              <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Techniques
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'reproducibility'}
+            className={`discovery-tab ${activeTab === 'reproducibility' ? 'discovery-tab--active' : ''}`}
+            onClick={() => setActiveTab('reproducibility')}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+            </svg>
+            Reproducibility
+          </button>
         </nav>
 
         {/* Tab content */}
@@ -502,6 +572,165 @@ export default function DiscoveryPage() {
                         </div>
                       );
                     })}
+                  </div>
+                </section>
+              )}
+
+              {/* Techniques tab */}
+              {activeTab === 'techniques' && (
+                <section className="tab-panel" aria-label="Technique explorer">
+                  <header className="tab-panel__header">
+                    <h2>Technique Explorer</h2>
+                    <span className="tab-panel__count">Papers by methodology type</span>
+                  </header>
+
+                  {/* Novelty type filter chips */}
+                  <div className="technique-filters">
+                    <button
+                      className={`technique-chip ${!selectedNoveltyType ? 'technique-chip--active' : ''}`}
+                      onClick={() => setSelectedNoveltyType(null)}
+                    >
+                      All Types
+                    </button>
+                    {Object.entries(techniqueDistribution)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 6)
+                      .map(([type, count]) => (
+                        <button
+                          key={type}
+                          className={`technique-chip ${selectedNoveltyType === type ? 'technique-chip--active' : ''}`}
+                          onClick={() => setSelectedNoveltyType(type)}
+                        >
+                          {type} <span className="technique-chip__count">{count}</span>
+                        </button>
+                      ))}
+                  </div>
+
+                  <div className="technique-grid">
+                    {techniques.map((paper) => (
+                      <article key={paper.id} className="technique-card">
+                        <header className="technique-card__header">
+                          {paper.novelty_type && (
+                            <span className="technique-card__type">{paper.novelty_type}</span>
+                          )}
+                        </header>
+
+                        <h3 className="technique-card__title">
+                          <Link href={`https://arxiv.org/abs/${paper.id.split('v')[0]}`} target="_blank">
+                            {paper.title}
+                          </Link>
+                        </h3>
+
+                        {paper.methodology_approach && (
+                          <p className="technique-card__methodology">
+                            {paper.methodology_approach.slice(0, 200)}
+                            {paper.methodology_approach.length > 200 ? '...' : ''}
+                          </p>
+                        )}
+
+                        {paper.key_components && paper.key_components.length > 0 && (
+                          <div className="technique-card__components">
+                            <span className="technique-card__label">Key Components:</span>
+                            <ul>
+                              {paper.key_components.slice(0, 3).map((comp, i) => (
+                                <li key={i}>{comp}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Reproducibility tab */}
+              {activeTab === 'reproducibility' && (
+                <section className="tab-panel" aria-label="Reproducibility index">
+                  <header className="tab-panel__header">
+                    <h2>Reproducibility Index</h2>
+                    <span className="tab-panel__count">Papers with code and data availability</span>
+                  </header>
+
+                  {/* Reproducibility score filter */}
+                  <div className="repro-filter">
+                    <span className="repro-filter__label">Minimum Score:</span>
+                    <div className="repro-filter__buttons">
+                      {[5, 6, 7, 8, 9].map((score) => (
+                        <button
+                          key={score}
+                          className={`repro-score-btn ${minReproducibility === score ? 'repro-score-btn--active' : ''}`}
+                          onClick={() => setMinReproducibility(score)}
+                        >
+                          {score}+
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="repro-grid">
+                    {reproducible.map((paper) => (
+                      <article key={paper.id} className="repro-card">
+                        <header className="repro-card__header">
+                          <div className="repro-card__score">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>{paper.reproducibility_score}/10</span>
+                          </div>
+                          <div className="repro-card__badges">
+                            {paper.has_code && (
+                              <span className="repro-badge repro-badge--code">Code</span>
+                            )}
+                            {paper.code_availability === 'yes' && (
+                              <span className="repro-badge repro-badge--available">Available</span>
+                            )}
+                            {paper.implementation_detail === 'high' && (
+                              <span className="repro-badge repro-badge--detailed">Detailed</span>
+                            )}
+                          </div>
+                        </header>
+
+                        <h3 className="repro-card__title">
+                          <Link href={`https://arxiv.org/abs/${paper.id.split('v')[0]}`} target="_blank">
+                            {paper.title}
+                          </Link>
+                        </h3>
+
+                        {paper.github_urls && paper.github_urls.length > 0 && (
+                          <div className="repro-card__links">
+                            <span className="repro-card__label">Repositories:</span>
+                            <div className="repro-card__repos">
+                              {paper.github_urls.slice(0, 2).map((url, i) => (
+                                <a
+                                  key={i}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="repro-card__repo"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                                  </svg>
+                                  {url.includes('github.com') ? url.split('github.com/')[1]?.split('/').slice(0, 2).join('/') : 'View Code'}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {paper.datasets_mentioned && paper.datasets_mentioned.length > 0 && (
+                          <div className="repro-card__datasets">
+                            <span className="repro-card__label">Datasets:</span>
+                            <div className="repro-card__dataset-list">
+                              {paper.datasets_mentioned.slice(0, 3).map((ds, i) => (
+                                <span key={i} className="repro-card__dataset">{ds}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    ))}
                   </div>
                 </section>
               )}
