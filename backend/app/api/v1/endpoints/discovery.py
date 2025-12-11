@@ -728,6 +728,413 @@ async def get_practical_papers(
     }
 
 
+# ============== Rising Papers (Citation Velocity) ==============
+
+class RisingPaper(BaseModel):
+    """Paper with citation velocity metrics"""
+    id: str
+    title: str
+    published: str
+    category: str
+    citation_count: int
+    influential_citation_count: int
+    months_since_publication: float
+    citation_velocity: float  # citations per month
+    link: str
+
+
+@router.get("/rising", response_model=dict)
+async def get_rising_papers(
+    category: Optional[str] = Query(default=None),
+    min_citations: int = Query(default=5, ge=1, description="Minimum citation count to consider"),
+    min_months: float = Query(default=1.0, ge=0.5, description="Minimum months since publication"),
+    max_months: Optional[float] = Query(default=24, description="Maximum months since publication (default 24 for recency)"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """
+    Discover rising papers with high citation velocity.
+
+    Citation velocity = citations / months_since_publication
+
+    This identifies papers gaining traction faster than average:
+    - A paper with 50 citations in 2 months (velocity=25) is more notable
+      than a paper with 100 citations in 12 months (velocity=8.3)
+
+    Filters:
+    - min_citations: Exclude papers with few citations (noise filter)
+    - min_months: Exclude very new papers (need time to accumulate citations)
+    - max_months: Focus on recent papers (default 24 months)
+
+    Returns papers sorted by citation velocity (highest first).
+    """
+    conditions = [
+        "p.citation_count >= :min_citations",
+        "p.published_date IS NOT NULL",
+        # Calculate months since publication
+        "EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 >= :min_months"  # 2592000 = 30 days in seconds
+    ]
+    params = {
+        "limit": limit,
+        "offset": offset,
+        "min_citations": min_citations,
+        "min_months": min_months
+    }
+
+    if max_months:
+        conditions.append("EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 <= :max_months")
+        params["max_months"] = max_months
+
+    if category:
+        conditions.append("p.category = :category")
+        params["category"] = category
+
+    where_clause = " AND ".join(conditions)
+
+    # Count total
+    count_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
+    count_query = f"SELECT COUNT(*) as total FROM papers p WHERE {where_clause}"
+    count_result = await database.fetch_one(count_query, count_params)
+    total = count_result["total"] if count_result else 0
+
+    # Fetch papers with velocity calculation
+    query = f"""
+        SELECT
+            p.id,
+            p.title,
+            p.published_date,
+            p.category,
+            p.citation_count,
+            p.influential_citation_count,
+            EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 as months_since_pub,
+            p.citation_count / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0, 0.1) as velocity
+        FROM papers p
+        WHERE {where_clause}
+        ORDER BY velocity DESC, p.citation_count DESC
+        LIMIT :limit OFFSET :offset
+    """
+
+    rows = await database.fetch_all(query, params)
+
+    papers = []
+    for row in rows:
+        months = float(row["months_since_pub"]) if row["months_since_pub"] else 1.0
+        velocity = float(row["velocity"]) if row["velocity"] else 0.0
+
+        papers.append({
+            "id": row["id"],
+            "title": row["title"],
+            "published": row["published_date"].isoformat() if row["published_date"] else None,
+            "category": row["category"],
+            "citation_count": row["citation_count"] or 0,
+            "influential_citation_count": row["influential_citation_count"] or 0,
+            "months_since_publication": round(months, 1),
+            "citation_velocity": round(velocity, 2),
+            "link": f"https://arxiv.org/abs/{row['id']}"
+        })
+
+    # Get velocity distribution stats
+    dist_query = f"""
+        SELECT velocity_tier, count FROM (
+            SELECT
+                CASE
+                    WHEN velocity >= 20 THEN 'viral (20+/mo)'
+                    WHEN velocity >= 10 THEN 'hot (10-20/mo)'
+                    WHEN velocity >= 5 THEN 'rising (5-10/mo)'
+                    WHEN velocity >= 2 THEN 'growing (2-5/mo)'
+                    ELSE 'steady (<2/mo)'
+                END as velocity_tier,
+                COUNT(*) as count
+            FROM (
+                SELECT
+                    p.citation_count / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0, 0.1) as velocity
+                FROM papers p
+                WHERE p.citation_count >= :min_citations
+                  AND p.published_date IS NOT NULL
+                  AND EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 >= :min_months
+                  {"AND EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 <= :max_months" if max_months else ""}
+            ) sub
+            GROUP BY 1
+        ) dist
+        ORDER BY
+            CASE velocity_tier
+                WHEN 'viral (20+/mo)' THEN 1
+                WHEN 'hot (10-20/mo)' THEN 2
+                WHEN 'rising (5-10/mo)' THEN 3
+                WHEN 'growing (2-5/mo)' THEN 4
+                ELSE 5
+            END
+    """
+    dist_params = {"min_citations": min_citations, "min_months": min_months}
+    if max_months:
+        dist_params["max_months"] = max_months
+
+    dist_rows = await database.fetch_all(dist_query, dist_params)
+    distribution = {row["velocity_tier"]: row["count"] for row in dist_rows}
+
+    return {
+        "papers": papers,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(papers) < total,
+        "velocity_distribution": distribution,
+        "filters": {
+            "min_citations": min_citations,
+            "min_months": min_months,
+            "max_months": max_months,
+            "category": category
+        },
+        "velocity_tiers": {
+            "viral": "20+ citations/month",
+            "hot": "10-20 citations/month",
+            "rising": "5-10 citations/month",
+            "growing": "2-5 citations/month",
+            "steady": "<2 citations/month"
+        }
+    }
+
+
+# ============== Hot Topics Dashboard ==============
+
+class HotTopic(BaseModel):
+    """A trending research topic with aggregated metrics"""
+    name: str
+    paper_count: int
+    total_citations: int
+    avg_citation_velocity: float
+    max_velocity: float
+    velocity_tier: str
+    trend_direction: str  # up, down, stable
+    trend_pct: Optional[float] = None
+    categories: List[str] = []
+    top_papers: List[dict] = []
+
+
+@router.get("/hot-topics", response_model=dict)
+async def get_hot_topics(
+    days: int = Query(default=30, ge=7, le=365, description="Timeframe for trend calculation"),
+    min_papers: int = Query(default=3, ge=1, le=50, description="Minimum papers per topic"),
+    category: Optional[str] = Query(default=None, description="Filter to arXiv category"),
+    min_citations: int = Query(default=5, ge=1, description="Minimum citations per paper"),
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    """
+    Get trending research topics based on aggregated citation velocity.
+
+    This endpoint identifies "hot" research topics by:
+    1. Finding papers with citation momentum (citation_velocity > 0)
+    2. Grouping by concept (topic) from the concepts table
+    3. Calculating aggregate metrics: total citations, avg velocity, paper count
+    4. Comparing to previous period for trend direction
+
+    Velocity tiers for topics (based on max paper velocity):
+    - viral: Has papers with 20+ citations/month
+    - hot: Has papers with 10-20 citations/month
+    - rising: Has papers with 5-10 citations/month
+    - growing: Has papers with 2-5 citations/month
+    - emerging: Max velocity < 2/month
+
+    Returns topics sorted by a composite score of velocity + paper count.
+    """
+    params = {
+        "min_papers": min_papers,
+        "min_citations": min_citations,
+        "limit": limit,
+    }
+
+    # Build category filter
+    category_filter = ""
+    if category:
+        category_filter = "AND p.category = :category"
+        params["category"] = category
+
+    # Calculate date cutoffs
+    cutoff_date = datetime.now() - timedelta(days=days)
+    prev_cutoff_date = datetime.now() - timedelta(days=days * 2)
+
+    params["cutoff_date"] = cutoff_date
+    params["prev_cutoff_date"] = prev_cutoff_date
+
+    # Main query: Get hot topics with aggregated metrics
+    # Join papers -> paper_concepts -> concepts
+    # Calculate velocity for each paper, then aggregate by concept
+    query = f"""
+        WITH paper_velocities AS (
+            -- Calculate velocity for each paper in the time window
+            SELECT
+                p.id as paper_id,
+                p.title,
+                p.category,
+                p.citation_count,
+                p.influential_citation_count,
+                p.published_date,
+                EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 as months_since_pub,
+                p.citation_count / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0, 0.1) as velocity
+            FROM papers p
+            WHERE p.citation_count >= :min_citations
+              AND p.published_date >= :cutoff_date
+              AND p.published_date IS NOT NULL
+              {category_filter}
+        ),
+        topic_aggregates AS (
+            -- Aggregate by concept
+            SELECT
+                c.name as topic_name,
+                c.id as concept_id,
+                COUNT(DISTINCT pv.paper_id) as paper_count,
+                SUM(pv.citation_count) as total_citations,
+                AVG(pv.velocity) as avg_velocity,
+                MAX(pv.velocity) as max_velocity,
+                array_agg(DISTINCT pv.category) as categories,
+                json_agg(
+                    json_build_object(
+                        'id', pv.paper_id,
+                        'title', pv.title,
+                        'velocity', ROUND(pv.velocity::numeric, 2),
+                        'citations', pv.citation_count
+                    ) ORDER BY pv.velocity DESC
+                ) FILTER (WHERE pv.velocity IS NOT NULL) as papers_json
+            FROM paper_velocities pv
+            JOIN paper_concepts pc ON pv.paper_id = pc.paper_id
+            JOIN concepts c ON pc.concept_id = c.id
+            GROUP BY c.id, c.name
+            HAVING COUNT(DISTINCT pv.paper_id) >= :min_papers
+        ),
+        prev_period AS (
+            -- Calculate previous period counts for trend
+            SELECT
+                c.name as topic_name,
+                COUNT(DISTINCT p.id) as prev_paper_count
+            FROM papers p
+            JOIN paper_concepts pc ON p.id = pc.paper_id
+            JOIN concepts c ON pc.concept_id = c.id
+            WHERE p.citation_count >= :min_citations
+              AND p.published_date >= :prev_cutoff_date
+              AND p.published_date < :cutoff_date
+              AND p.published_date IS NOT NULL
+              {category_filter}
+            GROUP BY c.name
+        )
+        SELECT
+            ta.topic_name,
+            ta.paper_count,
+            ta.total_citations,
+            ta.avg_velocity,
+            ta.max_velocity,
+            ta.categories,
+            ta.papers_json,
+            pp.prev_paper_count,
+            CASE
+                WHEN ta.max_velocity >= 20 THEN 'viral'
+                WHEN ta.max_velocity >= 10 THEN 'hot'
+                WHEN ta.max_velocity >= 5 THEN 'rising'
+                WHEN ta.max_velocity >= 2 THEN 'growing'
+                ELSE 'emerging'
+            END as velocity_tier
+        FROM topic_aggregates ta
+        LEFT JOIN prev_period pp ON ta.topic_name = pp.topic_name
+        ORDER BY
+            -- Composite score: velocity matters most, then paper count
+            (ta.avg_velocity * 0.6 + ta.paper_count * 0.4) DESC,
+            ta.total_citations DESC
+        LIMIT :limit
+    """
+
+    rows = await database.fetch_all(query, params)
+
+    topics = []
+    velocity_tier_counts = {"viral": 0, "hot": 0, "rising": 0, "growing": 0, "emerging": 0}
+
+    for row in rows:
+        # Parse papers JSON
+        papers_data = row["papers_json"]
+        if isinstance(papers_data, str):
+            papers_data = json.loads(papers_data)
+
+        # Get top 5 papers for this topic
+        top_papers = papers_data[:5] if papers_data else []
+
+        # Calculate trend
+        current_count = row["paper_count"]
+        prev_count = row["prev_paper_count"] or 0
+
+        if prev_count == 0:
+            trend_direction = "up" if current_count > 0 else "stable"
+            trend_pct = None
+        else:
+            change_pct = ((current_count - prev_count) / prev_count) * 100
+            if change_pct > 10:
+                trend_direction = "up"
+            elif change_pct < -10:
+                trend_direction = "down"
+            else:
+                trend_direction = "stable"
+            trend_pct = round(change_pct, 1)
+
+        # Parse categories
+        categories = row["categories"]
+        if isinstance(categories, str):
+            categories = categories.strip("{}").split(",") if categories else []
+
+        velocity_tier = row["velocity_tier"]
+        velocity_tier_counts[velocity_tier] = velocity_tier_counts.get(velocity_tier, 0) + 1
+
+        topics.append({
+            "name": row["topic_name"],
+            "paper_count": row["paper_count"],
+            "total_citations": row["total_citations"] or 0,
+            "avg_citation_velocity": round(float(row["avg_velocity"] or 0), 2),
+            "max_velocity": round(float(row["max_velocity"] or 0), 2),
+            "velocity_tier": velocity_tier,
+            "trend_direction": trend_direction,
+            "trend_pct": trend_pct,
+            "categories": list(set(categories)) if categories else [],
+            "top_papers": top_papers,
+        })
+
+    # Get total topic count
+    count_query = f"""
+        SELECT COUNT(DISTINCT c.name) as total
+        FROM papers p
+        JOIN paper_concepts pc ON p.id = pc.paper_id
+        JOIN concepts c ON pc.concept_id = c.id
+        WHERE p.citation_count >= :min_citations
+          AND p.published_date >= :cutoff_date
+          AND p.published_date IS NOT NULL
+          {category_filter}
+        GROUP BY c.name
+        HAVING COUNT(DISTINCT p.id) >= :min_papers
+    """
+    count_result = await database.fetch_all(count_query, {
+        "min_citations": min_citations,
+        "cutoff_date": cutoff_date,
+        "min_papers": min_papers,
+        **({"category": category} if category else {})
+    })
+    total_topics = len(count_result) if count_result else 0
+
+    return {
+        "topics": topics,
+        "total": total_topics,
+        "limit": limit,
+        "timeframe_days": days,
+        "filters": {
+            "min_papers": min_papers,
+            "min_citations": min_citations,
+            "category": category,
+        },
+        "velocity_tier_distribution": velocity_tier_counts,
+        "velocity_tiers": {
+            "viral": "Has papers with 20+ citations/month",
+            "hot": "Has papers with 10-20 citations/month",
+            "rising": "Has papers with 5-10 citations/month",
+            "growing": "Has papers with 2-5 citations/month",
+            "emerging": "Max velocity < 2/month"
+        }
+    }
+
+
 # ============== Analysis Statistics ==============
 
 @router.get("/stats", response_model=dict)
