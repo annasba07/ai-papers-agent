@@ -6,8 +6,9 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/", label: "Home", icon: "home" },
-  { href: "/discovery", label: "Discovery", icon: "radar", isNew: true },
+  { href: "/discovery", label: "Discovery", icon: "radar" },
   { href: "/trends", label: "Trends", icon: "trending" },
+  { href: "/benchmarks", label: "Benchmarks", icon: "trophy", isNew: true },
   { href: "/atlas-explore", label: "Atlas", icon: "explore" },
   { href: "/generate", label: "Code Gen", icon: "code" },
 ];
@@ -43,6 +44,16 @@ const icons: Record<string, React.ReactNode> = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="16 18 22 12 16 6" />
       <polyline points="8 6 2 12 8 18" />
+    </svg>
+  ),
+  trophy: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
     </svg>
   ),
 };
