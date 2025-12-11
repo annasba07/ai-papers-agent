@@ -63,6 +63,16 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
         if isinstance(authors, str):
             authors = json.loads(authors)
 
+        # Parse ai_analysis JSONB (returned as string by databases library)
+        ai_analysis = row["ai_analysis"]
+        if isinstance(ai_analysis, str):
+            ai_analysis = json.loads(ai_analysis)
+
+        # Parse deep_analysis JSONB (returned as string by databases library)
+        deep_analysis = row["deep_analysis"]
+        if isinstance(deep_analysis, str):
+            deep_analysis = json.loads(deep_analysis)
+
         plain_id = row["id"].split("v")[0]
 
         return {
@@ -76,8 +86,8 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
             "link": f"https://arxiv.org/abs/{plain_id}",
             "citation_count": row["citation_count"] or 0,
             "concepts": row["concepts"] or [],
-            "aiSummary": row["ai_analysis"],  # Tier 1: Abstract-based analysis
-            "deepAnalysis": row["deep_analysis"]  # Tier 2: PDF-based analysis
+            "aiSummary": ai_analysis,  # Tier 1: Abstract-based analysis
+            "deepAnalysis": deep_analysis  # Tier 2: PDF-based analysis
         }
     except Exception as e:
         # Log error but don't fail - caller will fall back to arXiv
@@ -646,6 +656,40 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
         )
 
 
+def _build_full_test_code(tests) -> str:
+    """Build complete test file from TestSuite for API response."""
+    if not tests:
+        return ""
+
+    test_file = f"""# Auto-generated test file
+import pytest
+import torch
+import numpy as np
+from model import *
+from config import *
+
+{tests.fixtures}
+
+# Functionality Tests
+"""
+    for test in tests.functionality_tests:
+        test_file += f"\n{test.test_code}\n"
+
+    test_file += "\n# Correctness Tests\n"
+    for test in tests.correctness_tests:
+        test_file += f"\n{test.test_code}\n"
+
+    test_file += "\n# Edge Case Tests\n"
+    for test in tests.edge_case_tests:
+        test_file += f"\n{test.test_code}\n"
+
+    test_file += "\n# Performance Tests\n"
+    for test in tests.performance_tests:
+        test_file += f"\n{test.test_code}\n"
+
+    return test_file
+
+
 @router.post("/{paper_id}/generate-code")
 async def generate_code_for_paper(paper_id: str):
     """
@@ -706,20 +750,27 @@ async def generate_code_for_paper(paper_id: str):
             },
             "code": {
                 "main_code": result.code.main_code if result.code else None,
-                "test_code": result.tests.fixtures if result.tests else None,
+                "test_code": _build_full_test_code(result.tests) if result.tests else None,
                 "example_code": result.code.example_code if result.code else None,
                 "config_code": result.code.config_code if result.code else None,
                 "dependencies": result.code.dependencies if result.code else [],
                 "framework": result.code.framework if result.code else "pytorch"
             },
             "tests": {
-                "total_tests": result.tests.total_tests if result.tests else 0
+                "total_tests": result.tests.total_tests if result.tests else 0,
+                "functionality_count": len(result.tests.functionality_tests) if result.tests else 0,
+                "correctness_count": len(result.tests.correctness_tests) if result.tests else 0,
+                "edge_case_count": len(result.tests.edge_case_tests) if result.tests else 0,
+                "performance_count": len(result.tests.performance_tests) if result.tests else 0
             },
             "test_results": {
                 "tests_passed": result.test_results.tests_passed if result.test_results else 0,
                 "tests_total": result.test_results.tests_total if result.test_results else 0,
                 "tests_failed": result.test_results.tests_failed if result.test_results else 0,
-                "execution_time": result.test_results.execution_time if result.test_results else 0
+                "execution_time": result.test_results.execution_time if result.test_results else 0,
+                "error_summary": result.test_results.error_summary if result.test_results else None,
+                "stdout": result.test_results.stdout[:2000] if result.test_results and result.test_results.stdout else None,
+                "stderr": result.test_results.stderr[:2000] if result.test_results and result.test_results.stderr else None
             },
             "debug_iterations": result.debug_iterations,
             "readme": result.readme,
