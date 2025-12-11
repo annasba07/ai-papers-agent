@@ -1,1 +1,1 @@
-never mention claude code or anthropic email address in any commit or pr message
+never mention claude code or anthropic email address in any commit or pr message. remember to commit often and keep each commit a small logical unit of work.
