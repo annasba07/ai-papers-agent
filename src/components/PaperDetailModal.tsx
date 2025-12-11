@@ -4,6 +4,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Paper } from '../types/Paper';
 import SmartBadges from './SmartBadges';
 import KnowledgeGraph from './KnowledgeGraph';
+import ExternalSignalsCard from './ExternalSignalsCard';
+import PaperLineageGraph from './PaperLineageGraph';
+import SimilarPapersCard from './SimilarPapersCard';
 
 interface PaperDetailModalProps {
   paper: Paper;
@@ -14,6 +17,7 @@ interface PaperDetailModalProps {
 const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onClose }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [showCitationGraph, setShowCitationGraph] = useState(false);
+  const [showLineageGraph, setShowLineageGraph] = useState(false);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -39,10 +43,11 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
     };
   }, [isOpen, onClose]);
 
-  // Reset citation graph state when modal closes
+  // Reset graph states when modal closes
   useEffect(() => {
     if (!isOpen) {
       setShowCitationGraph(false);
+      setShowLineageGraph(false);
     }
   }, [isOpen]);
 
@@ -84,6 +89,16 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
               />
             </div>
           </div>
+
+          <ExternalSignalsCard
+            paperId={paper.id}
+            apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}
+          />
+
+          <SimilarPapersCard
+            paperId={paper.id}
+            apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}
+          />
 
           <div className="concept-cloud">
             <h3>Key Concepts</h3>
@@ -174,6 +189,42 @@ const PaperDetailModal: React.FC<PaperDetailModalProps> = ({ paper, isOpen, onCl
               </div>
             </section>
           </div>
+
+          <section className="insight-section lineage-graph-section">
+            <h3
+              className="citation-graph-toggle"
+              onClick={() => setShowLineageGraph(!showLineageGraph)}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <span style={{
+                display: 'inline-block',
+                transform: showLineageGraph ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s ease'
+              }}>
+                &#9654;
+              </span>
+              Paper Lineage
+              <span style={{
+                fontSize: '0.8rem',
+                color: '#64748b',
+                fontWeight: 'normal'
+              }}>
+                {showLineageGraph ? '(click to collapse)' : '(click to expand)'}
+              </span>
+            </h3>
+            {showLineageGraph && (
+              <div className="lineage-graph-container" style={{ marginTop: '16px' }}>
+                <PaperLineageGraph
+                  paperId={paper.id}
+                  paperTitle={paper.title}
+                  apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api/v1'}
+                  width={700}
+                  height={450}
+                  maxDepth={2}
+                />
+              </div>
+            )}
+          </section>
 
           <section className="insight-section citation-graph-section">
             <h3
