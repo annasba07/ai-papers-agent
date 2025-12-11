@@ -758,6 +758,37 @@ code {
   overflow: hidden;
 }
 
+.highlight-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.highlight-card__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.citation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(249, 115, 22, 0.12));
+  color: var(--accent-amber);
+  font-family: var(--font-tech);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  white-space: nowrap;
+}
+
 .highlight-card__cta {
   display: inline-flex;
   align-items: center;
@@ -4142,5 +4173,144 @@ code {
   .graph-section__input {
     flex: 1;
     width: auto;
+  }
+}
+
+/* Rising Papers Section */
+.rising-section {
+  padding: 2rem;
+}
+
+.rising-section__header {
+  margin-bottom: 1.5rem;
+}
+
+.rising-section__header h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.rising-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.rising-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rising-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.rising-card--viral {
+  border-left: 4px solid #ef4444;
+}
+
+.rising-card--hot {
+  border-left: 4px solid #f97316;
+}
+
+.rising-card--rising {
+  border-left: 4px solid #eab308;
+}
+
+.rising-card--growing {
+  border-left: 4px solid #22c55e;
+}
+
+.rising-card--steady {
+  border-left: 4px solid #94a3b8;
+}
+
+.rising-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.rising-card h4 {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.rising-card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--secondary-text);
+  margin-bottom: 1rem;
+}
+
+.rising-card__stats span {
+  background: var(--component-bg-light);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.rising-card__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.velocity-badge {
+  font-family: var(--font-tech);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.velocity-badge--viral {
+  background: linear-gradient(135deg, #fef2f2, #fee2e2);
+  color: #dc2626;
+}
+
+.velocity-badge--hot {
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  color: #ea580c;
+}
+
+.velocity-badge--rising {
+  background: linear-gradient(135deg, #fefce8, #fef9c3);
+  color: #ca8a04;
+}
+
+.velocity-badge--growing {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  color: #16a34a;
+}
+
+.velocity-badge--steady {
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .rising-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rising-card__stats {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 }

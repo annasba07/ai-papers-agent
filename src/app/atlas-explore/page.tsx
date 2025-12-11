@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import CitationGraph from '@/components/CitationGraph';
+import './atlas-explore.css';
 
 type AtlasPaper = {
   id?: string;
@@ -10,6 +11,8 @@ type AtlasPaper = {
   link?: string;
   category?: string;
   published?: string;
+  citation_count?: number;
+  influential_citation_count?: number;
 };
 
 type AtlasSummary = {
@@ -30,12 +33,30 @@ type ContextualResult = {
   papers: { id: string; title: string; summary: string }[];
 };
 
+type RisingPaper = {
+  id: string;
+  title: string;
+  published: string;
+  category: string;
+  citation_count: number;
+  influential_citation_count: number;
+  months_since_publication: number;
+  citation_velocity: number;
+  link: string;
+};
+
 const recencyOptions = [
   { label: 'Last 30 days', value: 30 },
   { label: 'Last 90 days', value: 90 },
   { label: 'Last 6 months', value: 180 },
   { label: 'Last year', value: 365 },
   { label: 'All time', value: 0 },
+];
+
+const sortOptions = [
+  { label: 'Newest', value: 'published_date' },
+  { label: 'Most Cited', value: 'citation_count' },
+  { label: 'Title A-Z', value: 'title' },
 ];
 
 export default function AtlasExplorePage() {
@@ -51,9 +72,12 @@ export default function AtlasExplorePage() {
   const [category, setCategory] = useState<string>('all');
   const [days, setDays] = useState<number>(90);
   const [query, setQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('published_date');
   const [selectedTimelineCat, setSelectedTimelineCat] = useState<string>('');
   const [graphPaperId, setGraphPaperId] = useState<string>('');
   const [graphPaperTitle, setGraphPaperTitle] = useState<string>('');
+  const [risingPapers, setRisingPapers] = useState<RisingPaper[]>([]);
+  const [risingLoading, setRisingLoading] = useState(false);
 
   const availableCategories = useMemo(() => {
     if (summary?.topCategories?.length) {
@@ -98,6 +122,8 @@ export default function AtlasExplorePage() {
         params.set('limit', '50');
         params.set('category', category);
         params.set('days', String(days));
+        params.set('order_by', sortBy);
+        params.set('order_dir', sortBy === 'title' ? 'asc' : 'desc');
         if (query.trim()) params.set('query', query.trim());
         const res = await fetch(`/api/atlas/papers?${params.toString()}`);
         const data = await res.json();
@@ -110,7 +136,34 @@ export default function AtlasExplorePage() {
       }
     };
     loadPapers();
-  }, [category, days, query]);
+  }, [category, days, query, sortBy]);
+
+  // Fetch rising papers (high citation velocity)
+  useEffect(() => {
+    const loadRisingPapers = async () => {
+      setRisingLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '12');
+        params.set('min_citations', '5');
+        params.set('max_months', '24');
+        if (category && category !== 'all') {
+          params.set('category', category);
+        }
+        const res = await fetch(`/api/discovery/rising?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRisingPapers(data.papers || []);
+        }
+      } catch (err) {
+        console.error('Failed to load rising papers', err);
+        setRisingPapers([]);
+      } finally {
+        setRisingLoading(false);
+      }
+    };
+    loadRisingPapers();
+  }, [category]);
 
   const latestTechniques = useMemo(() => {
     return papers.slice(0, 12).map((p) => {
@@ -218,6 +271,16 @@ export default function AtlasExplorePage() {
                 </button>
               ))}
             </div>
+            <label className="select-inline">
+              <span>Sort by</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                {sortOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       </section>
@@ -321,7 +384,14 @@ export default function AtlasExplorePage() {
             <div className="paper-grid">
               {papers.slice(0, 9).map((paper, idx) => (
                 <div key={`${paper.id}-${idx}`} className="highlight-card">
-                  <div className="badge">{paper.category}</div>
+                  <div className="highlight-card__header">
+                    <div className="badge">{paper.category}</div>
+                    {typeof paper.citation_count === 'number' && paper.citation_count > 0 && (
+                      <div className="citation-badge" title="Citation count from Semantic Scholar">
+                        {paper.citation_count.toLocaleString()} citations
+                      </div>
+                    )}
+                  </div>
                   <h4>{paper.title}</h4>
                   <p>{paper.abstract?.slice(0, 160)}{paper.abstract && paper.abstract.length > 160 ? '…' : ''}</p>
                   <div className="highlight-card__actions">
@@ -362,6 +432,66 @@ export default function AtlasExplorePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Rising Papers Section */}
+      <section className="card rising-section">
+        <div className="rising-section__header">
+          <h2>Rising Papers</h2>
+          <p className="muted">Papers gaining citations faster than their peers. Citation velocity = citations / months since publication.</p>
+        </div>
+        {risingLoading ? (
+          <div className="muted">Loading rising papers…</div>
+        ) : risingPapers.length === 0 ? (
+          <div className="muted">No rising papers found for this category. Try selecting "All categories".</div>
+        ) : (
+          <div className="rising-grid">
+            {risingPapers.map((paper, idx) => {
+              const velocityTier = paper.citation_velocity >= 20 ? 'viral' :
+                paper.citation_velocity >= 10 ? 'hot' :
+                paper.citation_velocity >= 5 ? 'rising' :
+                paper.citation_velocity >= 2 ? 'growing' : 'steady';
+              return (
+                <div key={`${paper.id}-${idx}`} className={`rising-card rising-card--${velocityTier}`}>
+                  <div className="rising-card__header">
+                    <span className={`velocity-badge velocity-badge--${velocityTier}`}>
+                      {paper.citation_velocity.toFixed(1)}/mo
+                    </span>
+                    <span className="badge">{paper.category}</span>
+                  </div>
+                  <h4>{paper.title}</h4>
+                  <div className="rising-card__stats">
+                    <span title="Total citations">{paper.citation_count} citations</span>
+                    <span title="Age in months">{paper.months_since_publication.toFixed(1)} months old</span>
+                    {paper.influential_citation_count > 0 && (
+                      <span title="Influential citations">{paper.influential_citation_count} influential</span>
+                    )}
+                  </div>
+                  <div className="rising-card__actions">
+                    <a
+                      href={paper.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-sm"
+                    >
+                      View Paper
+                    </a>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-ghost"
+                      onClick={() => {
+                        setGraphPaperId(paper.id);
+                        setGraphPaperTitle(paper.title);
+                      }}
+                    >
+                      View Graph
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Similarity Graph Section */}
