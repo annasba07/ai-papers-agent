@@ -445,3 +445,123 @@ async def search_papers(
         ],
         "total": len(results)
     }
+
+
+@router.get("/categories")
+async def get_categories():
+    """
+    Get all categories with paper counts.
+    """
+    results = await database.fetch_all("""
+        SELECT
+            category,
+            COUNT(*) as paper_count
+        FROM papers
+        WHERE category IS NOT NULL
+        GROUP BY category
+        ORDER BY paper_count DESC
+    """)
+
+    return [
+        {
+            "category": r["category"],
+            "paper_count": r["paper_count"]
+        }
+        for r in results
+    ]
+
+
+@router.get("/techniques")
+async def get_techniques(
+    limit: int = Query(default=20, ge=1, le=100),
+    category: Optional[str] = Query(default=None)
+):
+    """
+    Get techniques extracted from deep analysis with paper counts.
+
+    - **limit**: Maximum number of techniques to return
+    - **category**: Optional category filter
+    """
+    category_filter = ""
+    params = {"limit": limit}
+
+    if category:
+        category_filter = "AND p.category = :category"
+        params["category"] = category
+
+    results = await database.fetch_all(f"""
+        SELECT
+            t.technique_name as name,
+            t.technique_type as type,
+            COUNT(DISTINCT t.paper_id) as paper_count
+        FROM (
+            SELECT
+                p.id as paper_id,
+                jsonb_array_elements_text(
+                    COALESCE(p.deep_analysis->'technical_innovations'->'key_techniques', '[]'::jsonb)
+                ) as technique_name,
+                p.deep_analysis->'technical_innovations'->>'novelty_type' as technique_type
+            FROM papers p
+            WHERE p.deep_analysis IS NOT NULL
+            {category_filter}
+        ) t
+        GROUP BY t.technique_name, t.technique_type
+        ORDER BY paper_count DESC
+        LIMIT :limit
+    """, params)
+
+    return [
+        {
+            "name": r["name"],
+            "type": r["type"],
+            "paper_count": r["paper_count"]
+        }
+        for r in results
+    ]
+
+
+@router.get("/timeline")
+async def get_timeline(
+    days: int = Query(default=30, ge=1, le=365),
+    granularity: str = Query(default="day", enum=["day", "week", "month"]),
+    category: Optional[str] = Query(default=None)
+):
+    """
+    Get paper counts over time for visualization.
+
+    - **days**: Number of days to look back (1-365)
+    - **granularity**: Time granularity (day, week, month)
+    - **category**: Optional category filter
+    """
+    category_filter = ""
+    params = {}
+
+    if category:
+        category_filter = "AND category = :category"
+        params["category"] = category
+
+    if granularity == "day":
+        date_trunc = "day"
+    elif granularity == "week":
+        date_trunc = "week"
+    else:
+        date_trunc = "month"
+
+    results = await database.fetch_all(f"""
+        SELECT
+            DATE_TRUNC('{date_trunc}', published_date) as period,
+            COUNT(*) as paper_count
+        FROM papers
+        WHERE published_date >= CURRENT_DATE - INTERVAL '{days} days'
+        {category_filter}
+        GROUP BY DATE_TRUNC('{date_trunc}', published_date)
+        ORDER BY period DESC
+    """, params)
+
+    return [
+        {
+            "period": r["period"].isoformat() if r["period"] else None,
+            "paper_count": r["paper_count"]
+        }
+        for r in results
+    ]
