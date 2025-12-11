@@ -1,0 +1,1 @@
+never mention claude code or anthropic email address in any commit or pr message
