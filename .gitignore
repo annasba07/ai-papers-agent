@@ -69,3 +69,19 @@ data/
 *.swo
 *~
 uvicorn.log
+
+# Local tool config
+.playwright-mcp/
+supabase/
+
+# Embedding cache (large binary files)
+embeddings/
+
+# Script logs
+gsutil_download.log
+gsutil_https.log
+nomic_embed.log
+pdf_download.log
+pdf_download_retry.log
+render_pages.log
+*.log
