@@ -303,16 +303,23 @@ async def get_paper_neighborhood(
 
 @router.get("/search", response_model=List[Dict[str, Any]])
 async def search_papers(
-    query: str = Query(..., description="Search query for papers"),
+    query: str = Query(..., min_length=1, description="Search query for papers"),
     max_results: int = Query(10, ge=1, le=50, description="Maximum number of results"),
     enhance_with_ai: bool = Query(False, description="Whether to enhance with AI analysis")
 ):
     """
     Search for papers using arXiv API
     """
+    # Validate query is not just whitespace
+    if not query or not query.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Search query cannot be empty"
+        )
+
     try:
         # Search for papers
-        papers = await arxiv_service.search_papers(query, max_results)
+        papers = await arxiv_service.search_papers(query.strip(), max_results)
         
         if not papers:
             return []
