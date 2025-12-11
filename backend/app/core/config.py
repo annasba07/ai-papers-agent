@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     OPENAI_RERANK_MODEL: Optional[str] = "text-embedding-3-large"
     OPENAI_RERANK_WEIGHT: float = 1.0
     VOYAGE_API_KEY: Optional[str] = None
+    SEMANTIC_SCHOLAR_API_KEY: Optional[str] = None
 
     @property
     def allowed_origins_list(self) -> list[str]:

@@ -25,10 +25,11 @@ from app.services.providers.semantic_scholar_provider import (
 from app.utils.logger import LoggerMixin
 
 
-# Semantic Scholar rate limits: 100 req/5min without key, 1/sec recommended
-BATCH_SIZE = 10  # Papers per batch (conservative for rate limits)
+# Semantic Scholar rate limits: 1 req/sec with API key
+# BUT the batch endpoint can fetch up to 500 papers per request!
+BATCH_SIZE = 500  # Papers per batch (max supported by batch endpoint)
 CONCURRENCY = 1  # Sequential to avoid rate limits
-DELAY_BETWEEN_BATCHES = 2.0  # Seconds between batches
+DELAY_BETWEEN_BATCHES = 1.5  # Seconds between batch requests
 
 
 @dataclass
@@ -167,16 +168,49 @@ class CitationEnrichmentService(LoggerMixin):
         papers: List[Dict[str, Any]],
         stats: CitationEnrichmentStats,
     ) -> None:
-        """Enrich a batch of papers concurrently."""
-        semaphore = asyncio.Semaphore(CONCURRENCY)
+        """Enrich a batch of papers using the batch endpoint (up to 500 at once)."""
+        if not papers:
+            return
 
-        async def enrich_with_limit(paper: Dict[str, Any]):
-            async with semaphore:
-                await self._enrich_paper(paper["id"], paper["title"], stats)
-                await asyncio.sleep(0.1)  # Respect rate limits
+        # Collect paper IDs for batch fetch
+        paper_ids = [p["id"] for p in papers]
+        id_to_original = {self._normalize_id(p["id"]): p["id"] for p in papers}
 
-        tasks = [enrich_with_limit(p) for p in papers]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            # Use batch API to fetch all papers at once (single request!)
+            batch_results = await self._provider.batch_get_citations(paper_ids)
+
+            # Process results and update database
+            for arxiv_id, data in batch_results.items():
+                original_id = id_to_original.get(self._normalize_id(arxiv_id), arxiv_id)
+
+                if data is None:
+                    stats.not_found += 1
+                    continue
+
+                stats.found += 1
+                citation_count = data.get("citation_count", 0)
+
+                if citation_count >= 0:  # Update even if 0 to mark as enriched
+                    # Find the actual paper ID with version suffix
+                    await database.execute(
+                        """
+                        UPDATE papers
+                        SET citation_count = :count, updated_at = :updated_at
+                        WHERE id LIKE :paper_id_pattern
+                        """,
+                        {
+                            "count": citation_count,
+                            "updated_at": datetime.utcnow(),
+                            "paper_id_pattern": f"{self._normalize_id(arxiv_id)}%",
+                        }
+                    )
+                    if citation_count > 0:
+                        stats.citation_counts_updated += 1
+
+        except Exception as e:
+            stats.errors.append(f"Batch error: {str(e)[:100]}")
+            self.log_warning(f"Batch enrichment error", error=str(e))
 
         stats.processed += len(papers)
 
