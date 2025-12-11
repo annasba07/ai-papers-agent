@@ -209,8 +209,10 @@ from config import *
         with open(req_file, "w") as f:
             f.write("\n".join(dependencies))
 
-        # Install with pip
-        cmd = f"pip install -q -r {req_file} --target {temp_dir}"
+        # Install with pip using current Python's pip
+        import sys
+        python_exe = sys.executable
+        cmd = f"{python_exe} -m pip install -q -r {req_file} --target {temp_dir}"
 
         proc = await asyncio.create_subprocess_shell(
             cmd,
@@ -234,8 +236,9 @@ from config import *
 
     async def _run_pytest(self, temp_dir: str):
         """Run pytest in temp directory"""
-
-        cmd = f"cd {temp_dir} && python -m pytest test_model.py -v --tb=short --no-header"
+        import sys
+        python_exe = sys.executable
+        cmd = f"cd {temp_dir} && {python_exe} -m pytest test_model.py -v --tb=short --no-header"
 
         proc = await asyncio.create_subprocess_shell(
             cmd,
