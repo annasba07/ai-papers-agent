@@ -17,7 +17,7 @@ from app.services.similarity_service import get_similarity_service
 from app.services.embedding_service import get_embedding_service
 
 
-router = APIRouter(prefix="/knowledge-graph", tags=["Knowledge Graph"])
+router = APIRouter(tags=["Knowledge Graph"])
 
 
 # ============================================================================
@@ -94,6 +94,85 @@ class EmbeddingStats(BaseModel):
     """Embedding coverage statistics"""
     papers: dict
     concepts: dict
+
+
+# ============================================================================
+# CONCEPTS ENDPOINT (for test compatibility)
+# ============================================================================
+
+@router.get("/concepts")
+async def get_concepts(
+    query: Optional[str] = Query(None, description="Search query for concepts"),
+    trending: bool = Query(False, description="Get trending concepts"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Get concepts - either by search query or trending concepts.
+
+    - **query**: Search query text (optional)
+    - **trending**: If true, returns trending concepts
+    - **limit**: Maximum results
+    """
+    service = get_similarity_service()
+
+    try:
+        if trending:
+            concepts = await service.get_trending_concepts(days=30, limit=limit)
+            return concepts
+        elif query:
+            # Search concepts by name
+            concepts = await service.search_concepts(query=query, limit=limit)
+            return concepts
+        else:
+            # Return all concepts
+            concepts = await service.get_all_concepts(limit=limit)
+            return concepts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/latest-research")
+async def get_latest_research(
+    category: Optional[str] = Query(None, description="arXiv category filter"),
+    days: int = Query(7, ge=1, le=365, description="Look back period"),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Get latest research papers (alias for /papers/latest).
+
+    - **category**: arXiv category (e.g., 'cs.LG', 'cs.AI')
+    - **days**: Look back period (1-365 days)
+    - **limit**: Maximum results
+    """
+    service = get_similarity_service()
+
+    try:
+        papers = await service.get_latest_papers(
+            category=category,
+            days=days,
+            limit=limit
+        )
+        return papers
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/benchmarks")
+async def get_benchmarks(
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    Get available benchmarks summary.
+
+    Returns a list of available task/dataset combinations.
+    """
+    service = get_similarity_service()
+
+    try:
+        benchmarks = await service.get_available_benchmarks(limit=limit)
+        return benchmarks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

@@ -714,6 +714,119 @@ class SimilarityService:
 
         return [dict(r) for r in results]
 
+    # ============================================================================
+    # 6. CONCEPT QUERIES (for knowledge-graph/concepts endpoint)
+    # ============================================================================
+
+    async def search_concepts(
+        self,
+        query: str,
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Search concepts by name
+
+        Args:
+            query: Search query text
+            limit: Maximum results
+
+        Returns:
+            List of matching concepts
+        """
+        limit = min(limit, self.max_limit)
+
+        sql = """
+            SELECT
+                c.id,
+                c.name,
+                c.category,
+                COUNT(pc.paper_id) as paper_count
+            FROM concepts c
+            LEFT JOIN paper_concepts pc ON c.id = pc.concept_id
+            WHERE c.name ILIKE :query
+            GROUP BY c.id, c.name, c.category
+            ORDER BY paper_count DESC, c.name
+            LIMIT :limit
+        """
+
+        results = await database.fetch_all(
+            text(sql),
+            {"query": f"%{query}%", "limit": limit}
+        )
+
+        return [dict(r) for r in results]
+
+    async def get_all_concepts(
+        self,
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all concepts ordered by usage
+
+        Args:
+            limit: Maximum results
+
+        Returns:
+            List of concepts
+        """
+        limit = min(limit, self.max_limit)
+
+        sql = """
+            SELECT
+                c.id,
+                c.name,
+                c.category,
+                COUNT(pc.paper_id) as paper_count
+            FROM concepts c
+            LEFT JOIN paper_concepts pc ON c.id = pc.concept_id
+            GROUP BY c.id, c.name, c.category
+            ORDER BY paper_count DESC, c.name
+            LIMIT :limit
+        """
+
+        results = await database.fetch_all(
+            text(sql),
+            {"limit": limit}
+        )
+
+        return [dict(r) for r in results]
+
+    async def get_available_benchmarks(
+        self,
+        limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """
+        Get available benchmarks summary
+
+        Args:
+            limit: Maximum results
+
+        Returns:
+            List of available task/dataset combinations
+        """
+        limit = min(limit, self.max_limit)
+
+        sql = """
+            SELECT
+                b.task,
+                b.dataset,
+                COUNT(DISTINCT b.paper_id) as paper_count,
+                COUNT(DISTINCT b.metric) as metric_count,
+                MAX(b.value) as best_score,
+                MAX(b.reported_date) as latest_date
+            FROM benchmarks b
+            GROUP BY b.task, b.dataset
+            ORDER BY paper_count DESC, latest_date DESC
+            LIMIT :limit
+        """
+
+        results = await database.fetch_all(
+            text(sql),
+            {"limit": limit}
+        )
+
+        return [dict(r) for r in results]
+
 
 # Global instance
 _similarity_service: Optional[SimilarityService] = None
