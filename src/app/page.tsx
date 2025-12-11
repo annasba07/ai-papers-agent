@@ -183,7 +183,7 @@ export default function Home() {
 
   const atlasError = summaryError ?? highlightsError;
 
-  const latestHighlightDate = useMemo(() => {
+  const latestHighlightDate = useMemo((): Date | null => {
     let latest: Date | null = null;
     atlasHighlights.forEach((paper) => {
       if (!paper.published) {

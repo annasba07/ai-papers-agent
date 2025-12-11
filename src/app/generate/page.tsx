@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 
 interface Paper {
   id: string;
@@ -64,7 +64,7 @@ export default function GeneratePage() {
       const paperList = Array.isArray(data) ? data : data.papers || [];
       setPapers(paperList);
       setStatus("idle");
-    } catch (err) {
+    } catch {
       setError("Failed to search papers. Please try again.");
       setStatus("idle");
     }

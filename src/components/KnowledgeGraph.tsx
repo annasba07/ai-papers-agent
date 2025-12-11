@@ -72,7 +72,7 @@ const KnowledgeGraph = ({
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const simulationRunning = useRef(false);
 
   // Fetch graph data

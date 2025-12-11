@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import type { TrendSummary, TrendingTopic, RisingTechnique, ActiveAuthor } from "@/types/Trends";
 
 type TrendsDashboardProps = {
@@ -51,7 +51,7 @@ const TrendsDashboard = ({ apiBaseUrl = "" }: TrendsDashboardProps) => {
       <section className="trends-dashboard">
         <header className="trends-dashboard__header">
           <span className="eyebrow">Research Trends</span>
-          <h2>What's Trending in AI Research</h2>
+          <h2>What&apos;s Trending in AI Research</h2>
         </header>
         <div className="trends-dashboard__loading">
           <div className="trends-dashboard__spinner" />
@@ -66,7 +66,7 @@ const TrendsDashboard = ({ apiBaseUrl = "" }: TrendsDashboardProps) => {
       <section className="trends-dashboard">
         <header className="trends-dashboard__header">
           <span className="eyebrow">Research Trends</span>
-          <h2>What's Trending in AI Research</h2>
+          <h2>What&apos;s Trending in AI Research</h2>
         </header>
         <div className="alert alert--error">{error}</div>
       </section>
@@ -78,7 +78,7 @@ const TrendsDashboard = ({ apiBaseUrl = "" }: TrendsDashboardProps) => {
       <section className="trends-dashboard">
         <header className="trends-dashboard__header">
           <span className="eyebrow">Research Trends</span>
-          <h2>What's Trending in AI Research</h2>
+          <h2>What&apos;s Trending in AI Research</h2>
         </header>
         <p className="trends-dashboard__empty">No trend data available.</p>
       </section>
@@ -89,7 +89,7 @@ const TrendsDashboard = ({ apiBaseUrl = "" }: TrendsDashboardProps) => {
     <section className="trends-dashboard">
       <header className="trends-dashboard__header">
         <span className="eyebrow">Research Trends</span>
-        <h2>What's Trending in AI Research</h2>
+        <h2>What&apos;s Trending in AI Research</h2>
         <p className="section-subtitle">
           Real-time analysis of technique adoption, research velocity, and emerging areas.
         </p>
@@ -307,7 +307,7 @@ const RisingTechniqueCard = ({
 
     <div className="trends-technique-card__counts">
       <span>{technique.previous_count} papers</span>
-      <span className="trends-technique-card__arrow">-></span>
+      <span className="trends-technique-card__arrow">→</span>
       <span className="trends-technique-card__current">{technique.current_count} papers</span>
     </div>
   </article>

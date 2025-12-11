@@ -47,7 +47,7 @@ const CitationBadge = ({
         }
         const data = await response.json();
         setCitations(data);
-      } catch (err) {
+      } catch {
         setError(true);
       } finally {
         setLoading(false);

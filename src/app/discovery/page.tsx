@@ -112,7 +112,7 @@ interface PracticalPaper {
 const AnimatedNumber = ({ value, duration = 1200 }: { value: number; duration?: number }) => {
   const [displayValue, setDisplayValue] = useState(0);
   const startTime = useRef<number | null>(null);
-  const animationFrame = useRef<number>();
+  const animationFrame = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const animate = (timestamp: number) => {

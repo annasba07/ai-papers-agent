@@ -443,7 +443,7 @@ export default function AtlasExplorePage() {
         {risingLoading ? (
           <div className="muted">Loading rising papers…</div>
         ) : risingPapers.length === 0 ? (
-          <div className="muted">No rising papers found for this category. Try selecting "All categories".</div>
+          <div className="muted">No rising papers found for this category. Try selecting &quot;All categories&quot;.</div>
         ) : (
           <div className="rising-grid">
             {risingPapers.map((paper, idx) => {
