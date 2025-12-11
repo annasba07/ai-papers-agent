@@ -112,6 +112,40 @@ class LocalAtlasService(LoggerMixin):
                         show_progress_bar=False,
                     )
                 )
+            # Validate embedding dimensions match encoder output
+            encoder_dim = self._get_encoder_dimension()
+            embed_dim = embeddings.shape[1] if len(embeddings.shape) > 1 else 0
+
+            if encoder_dim and embed_dim and encoder_dim != embed_dim:
+                self.log_warning(
+                    "Embedding dimension mismatch - trying compatible cache",
+                    cache_dim=embed_dim,
+                    encoder_dim=encoder_dim,
+                    cache_label=label_used,
+                )
+                # Try to find a compatible cache
+                compatible_embeddings, compatible_label = self._find_compatible_cache(
+                    cache_dir, encoder_dim
+                )
+                if compatible_embeddings is not None:
+                    embeddings = compatible_embeddings
+                    label_used = compatible_label
+                    self.log_info(
+                        "Using compatible embedding cache",
+                        label=compatible_label,
+                        dimension=embeddings.shape[1],
+                    )
+                else:
+                    # No compatible cache found - need to re-encode or use lexical only
+                    self.log_warning(
+                        "No compatible embedding cache found - semantic search disabled",
+                        encoder_dim=encoder_dim,
+                    )
+                    self._encoder = None
+                    self._embeddings = None
+                    self.enabled = True  # Still allow lexical search
+                    return
+
             self._embeddings = embeddings.astype(np.float32)
             self._active_cache_label = label_used or self._default_cache_label
             self.enabled = True
@@ -120,6 +154,7 @@ class LocalAtlasService(LoggerMixin):
                 paper_count=len(self._records),
                 model=model_name,
                 cached=bool(cached_embeddings is not None),
+                embedding_dim=self._embeddings.shape[1] if self._embeddings is not None else None,
             )
         except Exception as exc:  # pragma: no cover - fallback for missing model
             self.log_warning(
@@ -151,6 +186,60 @@ class LocalAtlasService(LoggerMixin):
             return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
         except ValueError:
             return None
+
+    def _get_encoder_dimension(self) -> Optional[int]:
+        """Get the output dimension of the current encoder."""
+        if self._encoder is None:
+            return None
+        if self._encoder_type == "specter2":
+            # SPECTER2 produces 768-dimensional embeddings
+            return 768
+        else:
+            # SentenceTransformer models have a get_sentence_embedding_dimension method
+            try:
+                return self._encoder.get_sentence_embedding_dimension()
+            except AttributeError:
+                return None
+
+    def _find_compatible_cache(
+        self, cache_dir: Path, target_dim: int
+    ) -> Tuple[Optional[np.ndarray], Optional[str]]:
+        """Find a cached embedding file with matching dimensions."""
+        if not cache_dir.exists():
+            return None, None
+
+        for ids_path in sorted(cache_dir.glob("*_ids.json")):
+            label = ids_path.name.replace("_ids.json", "")
+            embeddings_path = cache_dir / f"{label}_embeddings.npy"
+            if not embeddings_path.exists():
+                continue
+
+            try:
+                ids = json.loads(ids_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            # Check if IDs match
+            if len(ids) != len(self._record_ids):
+                continue
+            if any((rid or "") != (cached_id or "") for rid, cached_id in zip(self._record_ids, ids)):
+                continue
+
+            # Load and check dimensions
+            try:
+                embeddings = np.load(embeddings_path)
+                embed_dim = embeddings.shape[1] if len(embeddings.shape) > 1 else 0
+                if embed_dim == target_dim:
+                    self.log_info(
+                        "Found compatible embedding cache",
+                        label=label,
+                        dimension=embed_dim,
+                    )
+                    return embeddings, label
+            except Exception:
+                continue
+
+        return None, None
 
     def _get_query_embedding(self, query: str) -> np.ndarray:
         """
@@ -618,7 +707,13 @@ class Specter2Encoder:
         from adapters import AutoAdapterModel
         from transformers import AutoTokenizer
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Use MPS on Apple Silicon, CUDA on NVIDIA, or fall back to CPU
+        if torch.backends.mps.is_available():
+            self.device = torch.device("mps")
+        elif torch.cuda.is_available():
+            self.device = torch.device("cuda")
+        else:
+            self.device = torch.device("cpu")
 
         base_model_name = "allenai/specter2_base"
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_name)
