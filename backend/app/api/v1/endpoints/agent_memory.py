@@ -105,6 +105,84 @@ async def get_performance_stats(
     )
 
 
+@router.get("/reflections", response_model=List[ReflectionResponse])
+async def get_all_reflections(
+    agent_name: Optional[str] = Query(
+        None,
+        description="Filter by agent name (paper_analyzer, test_designer, code_generator, debugger, orchestrator)"
+    ),
+    task_type: Optional[str] = Query(
+        None,
+        description="Filter by task type (analysis, test_design, code_generation, debugging)"
+    ),
+    paper_category: Optional[str] = Query(
+        None,
+        description="Filter by paper category"
+    ),
+    max_age_days: int = Query(30, ge=1, le=365),
+    limit: int = Query(10, ge=1, le=50)
+):
+    """
+    Get reflections from all agents or a specific agent
+
+    Reflections capture what agents learned from each task,
+    enabling continuous improvement.
+    """
+    valid_agents = ["paper_analyzer", "test_designer", "code_generator", "debugger", "orchestrator"]
+
+    if agent_name and agent_name not in valid_agents:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid agent name. Valid agents: {valid_agents}"
+        )
+
+    memory = get_memory()
+
+    # If no agent specified, get reflections from all agents
+    if not agent_name:
+        all_reflections = []
+        for agent in valid_agents:
+            try:
+                reflections = await memory.get_reflections(
+                    agent,
+                    task_type=task_type,
+                    max_age_days=max_age_days,
+                    max_results=limit // len(valid_agents) + 1,
+                    paper_category=paper_category
+                )
+                all_reflections.extend(reflections)
+            except Exception:
+                continue
+        # Sort by timestamp if available and limit
+        all_reflections = sorted(
+            all_reflections,
+            key=lambda x: x.get("timestamp", ""),
+            reverse=True
+        )[:limit]
+    else:
+        all_reflections = await memory.get_reflections(
+            agent_name,
+            task_type=task_type,
+            max_age_days=max_age_days,
+            max_results=limit,
+            paper_category=paper_category
+        )
+
+    return [
+        ReflectionResponse(
+            id=r.get("id"),
+            reflection=r.get("reflection", ""),
+            task_type=r.get("task_type", "unknown"),
+            context=r.get("context"),
+            paper_category=r.get("paper_category"),
+            was_successful=r.get("was_successful", True),
+            timestamp=str(r.get("timestamp", "")) if r.get("timestamp") else None,
+            relevance_score=r.get("relevance_score")
+        )
+        for r in all_reflections
+    ]
+
+
 @router.get("/reflections/{agent_name}", response_model=List[ReflectionResponse])
 async def get_agent_reflections(
     agent_name: str,
