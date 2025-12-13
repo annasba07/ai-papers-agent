@@ -58,5 +58,6 @@ export interface AdvisorMessage {
     title: string;
     summary: string;
   }>;
+  suggestions?: string[];
   timestamp: Date;
 }

@@ -10,12 +10,49 @@ interface ResearchAdvisorProps {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
+// Starter prompts to help users get started
+const STARTER_PROMPTS = [
+  "Latest advances in LLM reasoning",
+  "Techniques for reducing model hallucinations",
+  "Efficient fine-tuning methods for transformers",
+  "State-of-the-art in multimodal learning",
+];
+
+// Generate follow-up suggestions based on context
+function generateFollowUpSuggestions(query: string, paperTitles: string[]): string[] {
+  const suggestions: string[] = [];
+
+  // Context-aware suggestions based on the query
+  if (query.toLowerCase().includes("llm") || query.toLowerCase().includes("language model")) {
+    suggestions.push("How do these methods scale to larger models?");
+    suggestions.push("What are the training costs involved?");
+  }
+  if (query.toLowerCase().includes("performance") || query.toLowerCase().includes("efficiency")) {
+    suggestions.push("Show me benchmarks comparing these approaches");
+    suggestions.push("What hardware requirements do these need?");
+  }
+  if (paperTitles.length > 0) {
+    suggestions.push("Find papers that cite these works");
+    suggestions.push("What are alternative approaches to this problem?");
+  }
+
+  // Generic useful follow-ups
+  if (suggestions.length < 3) {
+    suggestions.push("Show me implementation code for these techniques");
+    suggestions.push("What are the limitations of these methods?");
+    suggestions.push("Find more recent papers on this topic");
+  }
+
+  return suggestions.slice(0, 3);
+}
+
 export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProps) {
   const [messages, setMessages] = useState<AdvisorMessage[]>([
     {
       id: "welcome",
       role: "assistant",
       content: "Hi! I'm your Research Advisor. Describe what you're working on or what problem you're trying to solve, and I'll help you find relevant papers and techniques.",
+      suggestions: STARTER_PROMPTS,
       timestamp: new Date(),
     },
   ]);
@@ -26,6 +63,18 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle clicking on a suggestion chip
+  const handleSuggestionClick = (suggestion: string) => {
+    setInput(suggestion);
+    // Auto-submit after a brief delay to show the input
+    setTimeout(() => {
+      const form = document.querySelector(".advisor-input-form") as HTMLFormElement;
+      if (form) {
+        form.requestSubmit();
+      }
+    }, 100);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,15 +110,21 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
 
       const data = await response.json();
 
+      const papers = data.papers?.slice(0, 5).map((p: { id: string; title: string; summary?: string }) => ({
+        id: p.id,
+        title: p.title,
+        summary: p.summary || "",
+      })) || [];
+
+      const paperTitles = papers.map((p: { title: string }) => p.title);
+      const followUpSuggestions = generateFollowUpSuggestions(userMessage.content, paperTitles);
+
       const assistantMessage: AdvisorMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
         content: data.analysis || "I found some relevant papers for you.",
-        papers: data.papers?.slice(0, 5).map((p: { id: string; title: string; summary?: string }) => ({
-          id: p.id,
-          title: p.title,
-          summary: p.summary || "",
-        })),
+        papers,
+        suggestions: followUpSuggestions,
         timestamp: new Date(),
       };
 
@@ -133,37 +188,38 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
 
                 {/* Show paper recommendations */}
                 {msg.papers && msg.papers.length > 0 && (
-                  <div style={{ marginTop: "1rem" }}>
-                    <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "0.5rem" }}>
-                      Relevant papers:
-                    </p>
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  <div className="advisor-papers">
+                    <p className="advisor-papers__label">Relevant papers:</p>
+                    <ul className="advisor-papers__list">
                       {msg.papers.map((paper, i) => (
-                        <li
-                          key={paper.id || i}
-                          style={{
-                            padding: "0.5rem",
-                            marginBottom: "0.5rem",
-                            background: "rgba(0,0,0,0.05)",
-                            borderRadius: "0.5rem",
-                          }}
-                        >
+                        <li key={paper.id || i} className="advisor-paper">
                           <a
                             href={typeof paper.id === "string" && paper.id.startsWith("http") ? paper.id : `https://arxiv.org/abs/${paper.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{
-                              fontWeight: 500,
-                              fontSize: "0.875rem",
-                              display: "block",
-                              marginBottom: "0.25rem",
-                            }}
+                            className="advisor-paper__link"
                           >
                             {paper.title}
                           </a>
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {/* Show follow-up suggestions */}
+                {msg.suggestions && msg.suggestions.length > 0 && msg.id === messages[messages.length - 1]?.id && !isLoading && (
+                  <div className="advisor-suggestions">
+                    {msg.suggestions.map((suggestion, i) => (
+                      <button
+                        key={i}
+                        className="advisor-suggestion"
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        type="button"
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
