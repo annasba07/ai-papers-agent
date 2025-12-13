@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import type { ExploreFilters } from "@/types/Explore";
 
 interface FilterSidebarProps {
   filters: ExploreFilters;
   onFilterChange: (key: keyof ExploreFilters, value: unknown) => void;
   totalPapers: number;
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 const categories = [
@@ -29,17 +32,67 @@ export default function FilterSidebar({
   filters,
   onFilterChange,
   totalPapers,
+  isMobileOpen = false,
+  onMobileClose,
 }: FilterSidebarProps) {
+  // Handle escape key for mobile
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isMobileOpen && onMobileClose) {
+        onMobileClose();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isMobileOpen, onMobileClose]);
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileOpen]);
+
   return (
-    <aside className="explore-sidebar">
-      <div className="sidebar-header" style={{ marginBottom: "1.5rem" }}>
-        <h2 className="text-lg font-semibold" style={{ marginBottom: "0.25rem" }}>
-          Filters
-        </h2>
-        <span className="text-sm text-muted">
-          {totalPapers.toLocaleString()} papers
-        </span>
-      </div>
+    <>
+      {/* Mobile Overlay */}
+      {isMobileOpen && (
+        <div
+          className="filter-drawer-overlay"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside className={`explore-sidebar ${isMobileOpen ? "explore-sidebar--mobile-open" : ""}`}>
+        {/* Mobile Header with Close */}
+        <div className="sidebar-header">
+          <div>
+            <h2 className="text-lg font-semibold" style={{ marginBottom: "0.25rem" }}>
+              Filters
+            </h2>
+            <span className="text-sm text-muted">
+              {totalPapers.toLocaleString()} papers
+            </span>
+          </div>
+          {onMobileClose && (
+            <button
+              className="sidebar-close"
+              onClick={onMobileClose}
+              aria-label="Close filters"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
 
       {/* Quick Filters */}
       <div className="filter-section">
@@ -148,17 +201,18 @@ export default function FilterSidebar({
         </div>
       </div>
 
-      {/* Stats Footer */}
-      <div className="sidebar-footer" style={{ marginTop: "auto", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-          <span className="text-xs text-muted">Papers indexed</span>
-          <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
+        {/* Stats Footer */}
+        <div className="sidebar-footer" style={{ marginTop: "auto", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+            <span className="text-xs text-muted">Papers indexed</span>
+            <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span className="text-xs text-muted">Updated</span>
+            <span className="text-xs font-medium">Just now</span>
+          </div>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span className="text-xs text-muted">Updated</span>
-          <span className="text-xs font-medium">Just now</span>
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

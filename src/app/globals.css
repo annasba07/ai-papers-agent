@@ -377,9 +377,119 @@ body {
   cursor: pointer;
 }
 
+/* Mobile Filter Toggle Button - Hidden by default on desktop */
+.mobile-filter-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.mobile-filter-toggle:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.mobile-filter-toggle__count:not(:empty) {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  line-height: 18px;
+  text-align: center;
+  color: white;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+/* Mobile Filter Drawer Overlay */
+.filter-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: var(--z-modal);
+  opacity: 0;
+  animation: fadeIn var(--transition-base) forwards;
+}
+
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+
+/* Sidebar Close Button - Hidden on desktop */
+.sidebar-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sidebar-close:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+/* Sidebar Header - Update for mobile close button */
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
 @media (max-width: 1024px) {
+  /* Show mobile filter toggle */
+  .mobile-filter-toggle {
+    display: flex;
+  }
+
+  /* Transform sidebar into drawer */
   .explore-sidebar {
-    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(320px, 85vw);
+    z-index: calc(var(--z-modal) + 1);
+    transform: translateX(-100%);
+    transition: transform var(--transition-base);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .explore-sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Show close button on mobile */
+  .sidebar-close {
+    display: flex;
+  }
+
+  /* Adjust main padding */
+  .explore-main {
+    padding: var(--space-4);
   }
 }
 
