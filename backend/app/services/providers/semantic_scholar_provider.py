@@ -347,6 +347,222 @@ class SemanticScholarProvider(BaseProvider):
             self.log_error("Batch request failed", error=str(e))
             return results
 
+    async def batch_get_references(
+        self,
+        arxiv_ids: List[str],
+        max_refs_per_paper: int = 100,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get references for multiple papers using the batch endpoint.
+
+        Uses POST /paper/batch with references field to fetch up to 500 papers
+        per request. Each paper returns up to max_refs_per_paper references.
+
+        This is MUCH more efficient than individual /references calls:
+        - Individual: 2000 papers = 2000 API calls
+        - Batch: 2000 papers = 4 API calls (500 per batch)
+
+        Args:
+            arxiv_ids: List of arXiv IDs
+            max_refs_per_paper: Max references per paper (Semantic Scholar caps this)
+
+        Returns:
+            Dict mapping arxiv_id to list of reference dicts with arXiv IDs
+        """
+        results = {}
+        batch_size = 500  # Semantic Scholar max batch size
+
+        # Clean IDs and prepare mapping
+        cleaned_ids = []
+        id_mapping = {}
+        for arxiv_id in arxiv_ids:
+            clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+            cleaned_ids.append(clean_id)
+            id_mapping[clean_id] = arxiv_id
+
+        # Process in batches
+        for i in range(0, len(cleaned_ids), batch_size):
+            batch = cleaned_ids[i:i + batch_size]
+            batch_results = await self._fetch_batch_references(batch)
+
+            # Map results back to original IDs
+            for clean_id, refs in batch_results.items():
+                original_id = id_mapping.get(clean_id, clean_id)
+                results[original_id] = refs
+
+            self.log_info(
+                f"Batch refs {i//batch_size + 1}: fetched {len(batch_results)} papers"
+            )
+
+        return results
+
+    async def _fetch_batch_references(
+        self,
+        arxiv_ids: List[str],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch references for a batch of papers using POST /paper/batch.
+
+        Args:
+            arxiv_ids: List of clean arXiv IDs (no version suffix)
+
+        Returns:
+            Dict mapping arxiv_id to list of reference info dicts
+        """
+        results = {}
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            try:
+                await self._rate_limit()
+                client = await self._get_client()
+
+                # Format IDs for batch endpoint
+                paper_ids = [f"arXiv:{aid}" for aid in arxiv_ids]
+
+                # Request references.externalIds to get arXiv IDs of referenced papers
+                response = await client.post(
+                    "/paper/batch",
+                    params={"fields": "paperId,externalIds,references,references.externalIds,references.title"},
+                    json={"ids": paper_ids}
+                )
+
+                if response.status_code == 429:
+                    wait_time = 30 * (2 ** attempt)
+                    self.log_warning(f"Rate limit on batch refs, backing off {wait_time}s (attempt {attempt+1})")
+                    await asyncio.sleep(wait_time)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                # Process results
+                for idx, paper_data in enumerate(data):
+                    arxiv_id = arxiv_ids[idx] if idx < len(arxiv_ids) else None
+
+                    if paper_data is None or arxiv_id is None:
+                        if arxiv_id:
+                            results[arxiv_id] = []
+                        continue
+
+                    # Extract references with arXiv IDs
+                    refs = []
+                    for ref in paper_data.get("references", []) or []:
+                        if ref is None:
+                            continue
+                        external_ids = ref.get("externalIds", {}) or {}
+                        ref_arxiv = external_ids.get("ArXiv")
+                        if ref_arxiv:
+                            refs.append({
+                                "arxiv_id": ref_arxiv,
+                                "title": ref.get("title"),
+                                "paper_id": ref.get("paperId"),
+                            })
+
+                    # Also check source paper's arXiv ID
+                    source_external = paper_data.get("externalIds", {}) or {}
+                    source_arxiv = source_external.get("ArXiv") or arxiv_id
+                    results[source_arxiv] = refs
+
+                return results
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    wait_time = 30 * (2 ** attempt)
+                    self.log_warning(f"Rate limit (exception), backing off {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    continue
+                self.log_error(f"Batch refs API error: {e.response.status_code}")
+                return results
+            except Exception as e:
+                self.log_error("Batch refs request failed", error=str(e))
+                return results
+
+        return results
+
+    async def batch_get_paper_details(
+        self,
+        arxiv_ids: List[str],
+        fields: List[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get paper details for multiple papers using the batch endpoint.
+
+        Uses POST /paper/batch to fetch details for up to 500 papers per request.
+
+        Args:
+            arxiv_ids: List of arXiv IDs
+            fields: List of fields to request (default: citationCount, referenceCount)
+
+        Returns:
+            Dict mapping arxiv_id to dict of requested fields
+        """
+        if fields is None:
+            fields = ["citationCount", "referenceCount"]
+
+        results = {}
+        batch_size = 500
+
+        # Clean IDs and prepare mapping
+        cleaned_ids = []
+        id_mapping = {}
+        for arxiv_id in arxiv_ids:
+            clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
+            cleaned_ids.append(clean_id)
+            id_mapping[clean_id] = arxiv_id
+
+        # Process in batches
+        for i in range(0, len(cleaned_ids), batch_size):
+            batch = cleaned_ids[i:i + batch_size]
+            max_retries = 3
+
+            for attempt in range(max_retries):
+                try:
+                    await self._rate_limit()
+                    client = await self._get_client()
+
+                    paper_ids = [f"arXiv:{aid}" for aid in batch]
+                    fields_str = ",".join(fields)
+
+                    response = await client.post(
+                        "/paper/batch",
+                        params={"fields": fields_str},
+                        json={"ids": paper_ids}
+                    )
+
+                    if response.status_code == 429:
+                        wait_time = 30 * (2 ** attempt)
+                        self.log_warning(f"Rate limit on batch details, backing off {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                        continue
+
+                    response.raise_for_status()
+                    data = response.json()
+
+                    # Process results
+                    for idx, paper in enumerate(data):
+                        if paper is None:
+                            continue
+                        clean_id = batch[idx]
+                        original_id = id_mapping.get(clean_id, clean_id)
+                        results[original_id] = paper
+
+                    self.log_info(f"Batch details {i//batch_size + 1}: fetched {len([p for p in data if p])} papers")
+                    break
+
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 429 and attempt < max_retries - 1:
+                        wait_time = 30 * (2 ** attempt)
+                        await asyncio.sleep(wait_time)
+                        continue
+                    self.log_error(f"Batch details API error: {e.response.status_code}")
+                    break
+                except Exception as e:
+                    self.log_error("Batch details request failed", error=str(e))
+                    break
+
+        return results
+
     async def get_paper_references(
         self,
         arxiv_id: str,
@@ -395,7 +611,8 @@ class SemanticScholarProvider(BaseProvider):
     async def get_paper_citations(
         self,
         arxiv_id: str,
-        limit: int = 50
+        limit: int = 50,
+        max_retries: int = 3
     ) -> List[SemanticScholarPaper]:
         """
         Get papers that cite this paper.
@@ -403,39 +620,58 @@ class SemanticScholarProvider(BaseProvider):
         Args:
             arxiv_id: arXiv paper ID
             limit: Max citations to return
+            max_retries: Max retries for rate limit errors
 
         Returns:
             List of citing papers
         """
         clean_id = arxiv_id.split("v")[0] if "v" in arxiv_id else arxiv_id
 
-        try:
-            await self._rate_limit()
-            client = await self._get_client()
+        for attempt in range(max_retries):
+            try:
+                await self._rate_limit()
+                client = await self._get_client()
 
-            fields_str = ",".join(self.REFERENCE_FIELDS)
-            response = await client.get(
-                f"/paper/arXiv:{clean_id}/citations",
-                params={"fields": fields_str, "limit": min(limit, 1000)}
-            )
+                fields_str = ",".join(self.REFERENCE_FIELDS)
+                response = await client.get(
+                    f"/paper/arXiv:{clean_id}/citations",
+                    params={"fields": fields_str, "limit": min(limit, 1000)}
+                )
 
-            if response.status_code == 404:
+                if response.status_code == 404:
+                    return []
+
+                if response.status_code == 429:
+                    # Exponential backoff: 5s, 10s, 20s
+                    wait_time = 5 * (2 ** attempt)
+                    self.log_warning(f"Rate limit hit, backing off {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(wait_time)
+                    continue
+
+                response.raise_for_status()
+                data = response.json()
+
+                papers = []
+                for cit in data.get("data", []):
+                    citing_paper = cit.get("citingPaper")
+                    if citing_paper and citing_paper.get("paperId"):
+                        papers.append(self._parse_paper(citing_paper))
+
+                return papers
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    wait_time = 5 * (2 ** attempt)
+                    self.log_warning(f"Rate limit hit (exception), backing off {wait_time}s")
+                    await asyncio.sleep(wait_time)
+                    continue
+                self.log_error("Failed to get citations", error=str(e))
+                return []
+            except Exception as e:
+                self.log_error("Failed to get citations", error=str(e))
                 return []
 
-            response.raise_for_status()
-            data = response.json()
-
-            papers = []
-            for cit in data.get("data", []):
-                citing_paper = cit.get("citingPaper")
-                if citing_paper and citing_paper.get("paperId"):
-                    papers.append(self._parse_paper(citing_paper))
-
-            return papers
-
-        except Exception as e:
-            self.log_error("Failed to get citations", error=str(e))
-            return []
+        return []
 
     def _parse_paper(
         self,

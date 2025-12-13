@@ -9,7 +9,6 @@ Extracts concepts from papers and populates the knowledge graph:
 import asyncio
 import json
 from typing import List, Dict, Any, Optional
-from sqlalchemy import text
 import google.generativeai as genai
 
 from app.db.database import database
@@ -199,7 +198,7 @@ Return ONLY the JSON array, no other text.
                 # Insert or get concept
                 # First, check if concept exists
                 existing_concept = await database.fetch_one(
-                    text("SELECT id FROM concepts WHERE normalized_name = :name"),
+                    "SELECT id FROM concepts WHERE normalized_name = :name",
                     {"name": normalized_name}
                 )
 
@@ -208,11 +207,11 @@ Return ONLY the JSON array, no other text.
                 else:
                     # Insert new concept
                     result = await database.fetch_one(
-                        text("""
-                            INSERT INTO concepts (name, normalized_name, category, first_seen_date)
-                            VALUES (:name, :normalized_name, :category, CURRENT_TIMESTAMP)
-                            RETURNING id
-                        """),
+                        """
+                        INSERT INTO concepts (name, normalized_name, category, first_seen_date)
+                        VALUES (:name, :normalized_name, :category, CURRENT_TIMESTAMP)
+                        RETURNING id
+                        """,
                         {
                             "name": concept_name,
                             "normalized_name": normalized_name,
@@ -223,12 +222,12 @@ Return ONLY the JSON array, no other text.
 
                 # Insert paper-concept relationship
                 await database.execute(
-                    text("""
-                        INSERT INTO paper_concepts (paper_id, concept_id, relevance, extraction_method)
-                        VALUES (:paper_id, :concept_id, :relevance, 'ai_extraction')
-                        ON CONFLICT (paper_id, concept_id) DO UPDATE
-                        SET relevance = EXCLUDED.relevance
-                    """),
+                    """
+                    INSERT INTO paper_concepts (paper_id, concept_id, relevance, extraction_method)
+                    VALUES (:paper_id, :concept_id, :relevance, 'ai_extraction')
+                    ON CONFLICT (paper_id, concept_id) DO UPDATE
+                    SET relevance = EXCLUDED.relevance
+                    """,
                     {
                         "paper_id": paper_id,
                         "concept_id": concept_id,
@@ -238,16 +237,16 @@ Return ONLY the JSON array, no other text.
 
                 # Update paper's concepts_array for full-text search
                 await database.execute(
-                    text("""
-                        UPDATE papers
-                        SET concepts_array = ARRAY(
-                            SELECT c.name
-                            FROM paper_concepts pc
-                            JOIN concepts c ON pc.concept_id = c.id
-                            WHERE pc.paper_id = :paper_id
-                        )
-                        WHERE id = :paper_id
-                    """),
+                    """
+                    UPDATE papers
+                    SET concepts_array = ARRAY(
+                        SELECT c.name
+                        FROM paper_concepts pc
+                        JOIN concepts c ON pc.concept_id = c.id
+                        WHERE pc.paper_id = :paper_id
+                    )
+                    WHERE id = :paper_id
+                    """,
                     {"paper_id": paper_id}
                 )
 
@@ -311,35 +310,35 @@ Return ONLY the JSON array, no other text.
 
         # Total concepts
         total = await database.fetch_one(
-            text("SELECT COUNT(*) as count FROM concepts")
+            "SELECT COUNT(*) as count FROM concepts"
         )
 
         # Concepts by category
         by_category = await database.fetch_all(
-            text("""
-                SELECT category, COUNT(*) as count
-                FROM concepts
-                GROUP BY category
-                ORDER BY count DESC
-            """)
+            """
+            SELECT category, COUNT(*) as count
+            FROM concepts
+            GROUP BY category
+            ORDER BY count DESC
+            """
         )
 
         # Top concepts by paper count
         top_concepts = await database.fetch_all(
-            text("""
-                SELECT name, category, paper_count
-                FROM concepts
-                ORDER BY paper_count DESC
-                LIMIT 20
-            """)
+            """
+            SELECT name, category, paper_count
+            FROM concepts
+            ORDER BY paper_count DESC
+            LIMIT 20
+            """
         )
 
         # Papers with concepts
         papers_with_concepts = await database.fetch_one(
-            text("""
-                SELECT COUNT(DISTINCT paper_id) as count
-                FROM paper_concepts
-            """)
+            """
+            SELECT COUNT(DISTINCT paper_id) as count
+            FROM paper_concepts
+            """
         )
 
         return {
@@ -381,7 +380,7 @@ Return ONLY the JSON array, no other text.
         if max_papers:
             query += f" LIMIT {max_papers}"
 
-        papers = await database.fetch_all(text(query))
+        papers = await database.fetch_all(query)
 
         if not papers:
             self.log_info("No papers need concept extraction")

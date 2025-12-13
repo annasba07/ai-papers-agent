@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # AI Service Configuration
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
     OPENAI_API_KEY: Optional[str] = None
 
     # Rate Limiting
