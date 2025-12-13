@@ -5,36 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/", label: "Home", icon: "home" },
-  { href: "/discovery", label: "Discovery", icon: "radar" },
-  { href: "/trends", label: "Trends", icon: "trending" },
-  { href: "/benchmarks", label: "Benchmarks", icon: "trophy", isNew: true },
-  { href: "/atlas-explore", label: "Atlas", icon: "explore" },
-  { href: "/generate", label: "Code Gen", icon: "code" },
+  { href: "/explore", label: "Explore", icon: "compass" },
+  { href: "/generate", label: "Generate", icon: "code" },
 ];
 
 const icons: Record<string, React.ReactNode> = {
-  home: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  radar: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-      <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-    </svg>
-  ),
-  trending: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-      <polyline points="17 6 23 6 23 12" />
-    </svg>
-  ),
-  explore: (
+  compass: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="10" />
       <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
@@ -44,16 +20,6 @@ const icons: Record<string, React.ReactNode> = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="16 18 22 12 16 6" />
       <polyline points="8 6 2 12 8 18" />
-    </svg>
-  ),
-  trophy: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-      <path d="M4 22h16" />
-      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
     </svg>
   ),
 };
@@ -67,10 +33,13 @@ export default function GlobalNav() {
     return pathname.startsWith(href);
   };
 
+  // Redirect home to explore
+  const isHome = pathname === "/";
+
   return (
     <header className="global-nav">
       <div className="global-nav__container">
-        <Link href="/" className="global-nav__brand">
+        <Link href="/explore" className="global-nav__brand">
           <span className="global-nav__logo">
             <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
               <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
@@ -78,7 +47,7 @@ export default function GlobalNav() {
               <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="currentColor" strokeWidth="2" />
             </svg>
           </span>
-          <span className="global-nav__title">AI Paper Atlas</span>
+          <span className="global-nav__title">Paper Atlas</span>
         </Link>
 
         <button
@@ -96,12 +65,11 @@ export default function GlobalNav() {
               <li key={item.href} className="global-nav__item">
                 <Link
                   href={item.href}
-                  className={`global-nav__link ${isActive(item.href) ? "global-nav__link--active" : ""}`}
+                  className={`global-nav__link ${isActive(item.href) || (isHome && item.href === "/explore") ? "global-nav__link--active" : ""}`}
                   onClick={() => setMobileOpen(false)}
                 >
                   <span className="global-nav__icon">{icons[item.icon]}</span>
                   <span className="global-nav__label">{item.label}</span>
-                  {item.isNew && <span className="global-nav__badge">New</span>}
                 </Link>
               </li>
             ))}
