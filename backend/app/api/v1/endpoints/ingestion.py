@@ -7,6 +7,7 @@ Provides API access to paper ingestion:
 - View ingestion history
 """
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
@@ -29,24 +30,32 @@ class IngestionRequest(BaseModel):
         description="arXiv categories to fetch (default: all AI categories)"
     )
     max_per_category: int = Field(
-        100,
+        50000,
         ge=10,
-        le=500,
-        description="Maximum papers to fetch per category"
+        le=100000,
+        description="Safety limit for papers per category (default: 50000). Raised to allow full historical ingestion."
     )
     days_back: int = Field(
         2,
         ge=1,
-        le=7,
-        description="How many days back to look for papers"
+        le=365,
+        description="Fallback: how many days back (if since_date not provided)"
+    )
+    since_date: Optional[str] = Field(
+        None,
+        description="Fetch ALL papers since this date (YYYY-MM-DD), e.g. '2024-01-01'. Preferred over days_back."
+    )
+    write_ndjson_backup: bool = Field(
+        False,
+        description="Also write to NDJSON catalog file (for backup/offline analysis)"
     )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "categories": ["cs.AI", "cs.LG", "cs.CV"],
-                "max_per_category": 100,
-                "days_back": 2
+                "since_date": "2024-12-01",
+                "max_per_category": 50000
             }
         }
 
@@ -106,13 +115,26 @@ async def trigger_ingestion(
             message="Ingestion is already in progress. Check /status for updates."
         )
 
+    # Parse since_date if provided
+    since_date = None
+    if request.since_date:
+        try:
+            since_date = datetime.strptime(request.since_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid since_date format: {request.since_date}. Use YYYY-MM-DD."
+            )
+
     # Run ingestion in background
     async def run_background_ingestion():
         await service.run_ingestion(
             categories=request.categories,
             max_per_category=request.max_per_category,
             days_back=request.days_back,
-            generate_embeddings=False  # Embeddings are expensive, run separately
+            since_date=since_date,
+            generate_embeddings=False,  # Embeddings are expensive, run separately
+            write_ndjson_backup=request.write_ndjson_backup
         )
 
     background_tasks.add_task(run_background_ingestion)
@@ -142,11 +164,24 @@ async def trigger_ingestion_sync(request: IngestionRequest):
             message="Ingestion is already in progress. Check /status for updates."
         )
 
+    # Parse since_date if provided
+    since_date = None
+    if request.since_date:
+        try:
+            since_date = datetime.strptime(request.since_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid since_date format: {request.since_date}. Use YYYY-MM-DD."
+            )
+
     stats = await service.run_ingestion(
         categories=request.categories,
         max_per_category=request.max_per_category,
         days_back=request.days_back,
-        generate_embeddings=False
+        since_date=since_date,
+        generate_embeddings=False,
+        write_ndjson_backup=request.write_ndjson_backup
     )
 
     return IngestionResult(
