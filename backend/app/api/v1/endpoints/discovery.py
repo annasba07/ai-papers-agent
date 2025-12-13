@@ -1220,3 +1220,164 @@ async def get_discovery_stats():
             "industry_relevance": {row["relevance"]: row["count"] for row in industry_dist},
         }
     }
+
+
+# ============== Advanced Momentum Intelligence ==============
+
+from app.services.momentum_service import get_momentum_service
+
+
+@router.get("/rising-stars", response_model=dict)
+async def get_rising_stars(
+    days: int = Query(default=90, ge=7, le=365, description="Look back N days"),
+    min_citations: int = Query(default=1, ge=1, description="Minimum citations to include"),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """
+    Find papers with highest citation velocity (citations per day).
+
+    Unlike /rising which uses months, this uses days for more precision
+    and includes age-adjusted performance metrics:
+    - citations_per_day: Raw velocity
+    - velocity_percentile: How this compares to peers
+    - expected_citations: What we'd expect for this age
+    - performance_ratio: Actual vs expected (>3 = breakout)
+    - momentum_score: Composite score factoring velocity + recency
+
+    Great for discovering papers gaining traction RIGHT NOW.
+    """
+    service = get_momentum_service()
+    results = await service.get_rising_stars(
+        days=days,
+        min_citations=min_citations,
+        limit=limit
+    )
+
+    return {
+        "papers": results,
+        "total": len(results),
+        "filters": {
+            "days": days,
+            "min_citations": min_citations
+        },
+        "metrics_explained": {
+            "citations_per_day": "Raw citation velocity",
+            "velocity_percentile": "Position vs all papers (99 = top 1%)",
+            "expected_citations": "Typical citations for this paper age",
+            "performance_ratio": "Actual / Expected (>3 = breakout)",
+            "momentum_score": "Composite score (velocity * recency)"
+        }
+    }
+
+
+@router.get("/breakout-papers", response_model=dict)
+async def get_breakout_papers(
+    days: int = Query(default=30, ge=7, le=180, description="Look at papers from last N days"),
+    min_ratio: float = Query(default=3.0, ge=1.5, le=10.0, description="Minimum performance ratio"),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """
+    Find recent papers dramatically outperforming expectations.
+
+    Breakout papers are getting 3x+ the citations expected for their age.
+    This identifies potential landmark papers early - before they become famous.
+
+    A paper from 2 weeks ago with 10 citations when we'd expect 0.5
+    is a 20x breakout - that's extremely noteworthy!
+
+    Returns papers sorted by performance_ratio (highest overperformance first).
+    """
+    service = get_momentum_service()
+    results = await service.get_breakout_papers(
+        days=days,
+        min_ratio=min_ratio,
+        limit=limit
+    )
+
+    return {
+        "papers": results,
+        "total": len(results),
+        "filters": {
+            "days": days,
+            "min_ratio": min_ratio
+        },
+        "explanation": f"Papers from the last {days} days with {min_ratio}x+ expected citations"
+    }
+
+
+@router.get("/hidden-gems", response_model=dict)
+async def get_hidden_gems(
+    min_age_days: int = Query(default=60, ge=30, description="Minimum paper age in days"),
+    max_age_days: int = Query(default=365, ge=60, le=730, description="Maximum paper age in days"),
+    min_citations: int = Query(default=5, ge=1, description="Minimum citations"),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """
+    Find underappreciated quality papers that deserve more attention.
+
+    Hidden gems are papers with:
+    - Solid citation counts (above average but not viral)
+    - Good quality indicators (impact score if available)
+    - Not currently trending (moderate velocity)
+
+    These are papers that did well but didn't go viral - often because
+    they're in niche areas or ahead of their time.
+
+    Perfect for finding important work that the crowd missed.
+    """
+    service = get_momentum_service()
+    results = await service.get_hidden_gems(
+        min_age_days=min_age_days,
+        max_age_days=max_age_days,
+        min_citations=min_citations,
+        limit=limit
+    )
+
+    return {
+        "papers": results,
+        "total": len(results),
+        "filters": {
+            "min_age_days": min_age_days,
+            "max_age_days": max_age_days,
+            "min_citations": min_citations
+        },
+        "explanation": f"Quality papers from {min_age_days}-{max_age_days} days ago that aren't trending"
+    }
+
+
+@router.get("/paper/{paper_id}/momentum", response_model=dict)
+async def get_paper_momentum(paper_id: str):
+    """
+    Get momentum metrics for a specific paper.
+
+    Returns detailed velocity and performance analysis:
+    - How fast is this paper gaining citations?
+    - How does it compare to papers of similar age?
+    - Is it a breakout paper?
+    - What's the momentum trend?
+
+    Use this to understand if a specific paper is gaining traction.
+    """
+    service = get_momentum_service()
+    result = await service.get_paper_momentum(paper_id)
+
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Paper not found: {paper_id}")
+
+    return result
+
+
+@router.get("/weekly-digest", response_model=dict)
+async def get_weekly_digest():
+    """
+    Get a curated weekly digest of paper momentum.
+
+    Combines:
+    - Rising stars: Top 5 papers by velocity this week
+    - Breakout papers: Papers exceeding expectations
+    - Hidden gems: Quality papers worth discovering
+
+    Perfect for weekly research updates.
+    """
+    service = get_momentum_service()
+    return await service.get_weekly_digest(limit=10)
