@@ -72,6 +72,8 @@ class MomentumService:
 
         These are papers accumulating citations faster than their peers.
         """
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+
         query = """
             WITH paper_velocity AS (
                 SELECT
@@ -83,7 +85,7 @@ class MomentumService:
                     EXTRACT(days FROM NOW() - p.published_date)::int as days_old,
                     p.citation_count::float / GREATEST(EXTRACT(days FROM NOW() - p.published_date), 1) as velocity
                 FROM papers p
-                WHERE p.published_date > NOW() - :days_interval
+                WHERE p.published_date > :cutoff_date
                 AND p.citation_count >= :min_citations
                 AND p.published_date IS NOT NULL
             ),
@@ -111,7 +113,7 @@ class MomentumService:
         """
 
         rows = await database.fetch_all(query, {
-            "days_interval": timedelta(days=days),
+            "cutoff_date": cutoff_date,
             "min_citations": min_citations,
             "limit": limit
         })
@@ -164,6 +166,8 @@ class MomentumService:
 
         Breakout papers are getting 3x+ the citations expected for their age.
         """
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+
         query = """
             SELECT
                 p.id,
@@ -174,7 +178,7 @@ class MomentumService:
                 EXTRACT(days FROM NOW() - p.published_date)::int as days_old,
                 p.citation_count::float / GREATEST(EXTRACT(days FROM NOW() - p.published_date), 1) as velocity
             FROM papers p
-            WHERE p.published_date > NOW() - :days_interval
+            WHERE p.published_date > :cutoff_date
             AND p.citation_count >= 2
             AND p.published_date IS NOT NULL
             ORDER BY velocity DESC
@@ -182,7 +186,7 @@ class MomentumService:
         """
 
         rows = await database.fetch_all(query, {
-            "days_interval": timedelta(days=days)
+            "cutoff_date": cutoff_date
         })
 
         # Filter by performance ratio
@@ -228,6 +232,10 @@ class MomentumService:
         Hidden gems have solid citations but aren't trending -
         papers that deserve more attention.
         """
+        # Calculate cutoff dates (max_age creates earlier date, min_age creates later date)
+        min_cutoff_date = datetime.utcnow() - timedelta(days=min_age_days)
+        max_cutoff_date = datetime.utcnow() - timedelta(days=max_age_days)
+
         query = """
             WITH paper_data AS (
                 SELECT
@@ -236,10 +244,9 @@ class MomentumService:
                     p.abstract,
                     p.published_date,
                     p.citation_count,
-                    p.impact_score,
                     EXTRACT(days FROM NOW() - p.published_date)::int as days_old
                 FROM papers p
-                WHERE p.published_date BETWEEN NOW() - :max_interval AND NOW() - :min_interval
+                WHERE p.published_date BETWEEN :max_cutoff_date AND :min_cutoff_date
                 AND p.citation_count >= :min_citations
                 AND p.published_date IS NOT NULL
             ),
@@ -257,13 +264,13 @@ class MomentumService:
             FROM paper_data pd
             CROSS JOIN peer_stats ps
             WHERE pd.citation_count BETWEEN ps.avg_citations * 0.5 AND ps.p75_citations * 1.2
-            ORDER BY pd.impact_score DESC NULLS LAST, pd.citation_count DESC
+            ORDER BY pd.citation_count DESC
             LIMIT :limit
         """
 
         rows = await database.fetch_all(query, {
-            "min_interval": timedelta(days=min_age_days),
-            "max_interval": timedelta(days=max_age_days),
+            "min_cutoff_date": min_cutoff_date,
+            "max_cutoff_date": max_cutoff_date,
             "min_citations": min_citations,
             "limit": limit
         })
@@ -281,7 +288,6 @@ class MomentumService:
                 "citation_count": row["citation_count"],
                 "days_since_publication": days_old,
                 "citations_per_day": round(velocity, 4),
-                "impact_score": row["impact_score"],
                 "citation_percentile": round(row["citation_percentile"], 1),
                 "context": f"💎 Solid {row['citation_count']} citations but not yet trending - quality paper worth attention"
             })
@@ -296,7 +302,6 @@ class MomentumService:
                 p.title,
                 p.published_date,
                 p.citation_count,
-                p.impact_score,
                 EXTRACT(days FROM NOW() - p.published_date)::int as days_old
             FROM papers p
             WHERE p.id = :paper_id
@@ -339,7 +344,6 @@ class MomentumService:
             "performance_ratio": round(performance_ratio, 2),
             "momentum_score": round(momentum_score, 1),
             "is_breakout": is_breakout,
-            "impact_score": row["impact_score"],
             "context": self._generate_momentum_context(
                 velocity,
                 velocity_percentile,
