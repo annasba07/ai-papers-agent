@@ -8,6 +8,7 @@ Manages the creation and tracking of enrichment jobs:
 - Health monitoring via database views
 """
 
+import json
 import uuid
 import logging
 from typing import Optional, List, Dict, Any
@@ -124,13 +125,14 @@ class PipelineService:
             RETURNING id
         """
 
+        import json
         result = await database.fetch_one(query, {
             "job_type": job_type,
             "paper_id": paper_id,
             "batch_id": batch_id,
             "priority": priority,
             "idempotency_key": idempotency_key,
-            "metadata": metadata or {}
+            "metadata": json.dumps(metadata or {})
         })
 
         return result["id"] if result else None
@@ -196,7 +198,9 @@ class PipelineService:
         max_papers: Optional[int] = None,
         priority: int = JobPriority.NORMAL,
         min_completeness: int = 0,
-        max_completeness: int = 99
+        max_completeness: int = 99,
+        published_after: Optional[str] = None,
+        published_before: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Create backfill jobs for papers needing processing.
@@ -207,39 +211,61 @@ class PipelineService:
             priority: Job priority
             min_completeness: Minimum completeness score
             max_completeness: Maximum completeness score (papers to include)
+            published_after: Only process papers published after this date (YYYY-MM-DD)
+            published_before: Only process papers published before this date (YYYY-MM-DD)
 
         Returns:
             Summary of created jobs
         """
         batch_id = str(uuid.uuid4())
 
+        # Build dynamic WHERE clause for date filtering
+        date_conditions = ""
+        if published_after:
+            date_conditions += " AND p.published_date >= :published_after"
+        if published_before:
+            date_conditions += " AND p.published_date <= :published_before"
+
         # Get papers needing processing
-        query = """
+        # Only apply LIMIT if max_papers is explicitly set
+        limit_clause = "LIMIT :max_papers" if max_papers else ""
+
+        query = f"""
             SELECT
-                paper_id,
-                completeness_score,
-                embedding_at IS NULL as needs_embedding,
-                ai_analysis_at IS NULL as needs_ai_analysis,
-                citations_at IS NULL as needs_citations,
-                concepts_at IS NULL as needs_concepts,
-                techniques_at IS NULL as needs_techniques,
-                benchmarks_at IS NULL as needs_benchmarks,
-                github_at IS NULL as needs_github,
-                deep_analysis_at IS NULL as needs_deep_analysis,
-                relationships_at IS NULL as needs_relationships
-            FROM paper_processing_state
-            WHERE completeness_score >= :min_completeness
-            AND completeness_score <= :max_completeness
-            AND error_count < 5
-            ORDER BY priority DESC, completeness_score ASC
-            LIMIT :max_papers
+                pps.paper_id,
+                pps.completeness_score,
+                pps.embedding_at IS NULL as needs_embedding,
+                pps.ai_analysis_at IS NULL as needs_ai_analysis,
+                pps.citations_at IS NULL as needs_citations,
+                pps.concepts_at IS NULL as needs_concepts,
+                pps.techniques_at IS NULL as needs_techniques,
+                pps.benchmarks_at IS NULL as needs_benchmarks,
+                pps.github_at IS NULL as needs_github,
+                pps.deep_analysis_at IS NULL as needs_deep_analysis,
+                pps.relationships_at IS NULL as needs_relationships,
+                p.published_date
+            FROM paper_processing_state pps
+            JOIN papers p ON pps.paper_id = p.id
+            WHERE pps.completeness_score >= :min_completeness
+            AND pps.completeness_score <= :max_completeness
+            AND pps.error_count < 5
+            {date_conditions}
+            ORDER BY pps.priority DESC, pps.completeness_score ASC
+            {limit_clause}
         """
 
-        rows = await database.fetch_all(query, {
+        params = {
             "min_completeness": min_completeness,
             "max_completeness": max_completeness,
-            "max_papers": max_papers or 10000
-        })
+        }
+        if max_papers:
+            params["max_papers"] = max_papers
+        if published_after:
+            params["published_after"] = datetime.strptime(published_after, "%Y-%m-%d")
+        if published_before:
+            params["published_before"] = datetime.strptime(published_before, "%Y-%m-%d")
+
+        rows = await database.fetch_all(query, params)
 
         created = 0
 
@@ -322,7 +348,7 @@ class PipelineService:
         """
         result = await database.fetch_one(query, {
             "run_type": run_type,
-            "config": {**config, "batch_id": batch_id},
+            "config": json.dumps({**config, "batch_id": batch_id}, default=str),
             "total_items": total_items
         })
         return result["id"]
