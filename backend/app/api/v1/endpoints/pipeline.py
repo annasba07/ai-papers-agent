@@ -37,8 +37,8 @@ class BackfillRequest(BaseModel):
         description="Stages to backfill (None = auto-detect per paper)"
     )
     max_papers: Optional[int] = Field(
-        1000,
-        description="Maximum papers to process"
+        None,
+        description="Maximum papers to process (None = no limit, use with date filters)"
     )
     priority: int = Field(
         JobPriority.NORMAL,
