@@ -9,6 +9,13 @@ interface TrendingTopic {
   category?: string;
 }
 
+interface TrendsSummaryRaw {
+  hot_topics: TrendingTopic[];
+  rising_techniques: TrendingTopic[];
+  // Backend returns strings for emerging_areas, not full objects
+  emerging_areas: string[] | TrendingTopic[];
+}
+
 interface TrendsSummary {
   hot_topics: TrendingTopic[];
   rising_techniques: TrendingTopic[];
@@ -31,8 +38,22 @@ export default function TrendingWidget() {
 
         const response = await fetch(endpoint);
         if (response.ok) {
-          const data = await response.json();
-          setTrends(data);
+          const rawData: TrendsSummaryRaw = await response.json();
+
+          // Transform emerging_areas from string[] to TrendingTopic[]
+          const transformedData: TrendsSummary = {
+            hot_topics: rawData.hot_topics || [],
+            rising_techniques: rawData.rising_techniques || [],
+            emerging_areas: (rawData.emerging_areas || []).map((area) => {
+              // Handle both string and object formats for backwards compatibility
+              if (typeof area === "string") {
+                return { name: area, count: 0 };
+              }
+              return area;
+            }),
+          };
+
+          setTrends(transformedData);
         }
       } catch {
         // Silently fail - widget is non-critical
