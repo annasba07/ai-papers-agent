@@ -747,5 +747,24 @@ class Specter2Encoder:
         return np.vstack(embeddings)
 
 
-# Module-level singleton
-local_atlas_service = LocalAtlasService()
+# Module-level singleton with lazy initialization
+_local_atlas_service: Optional[LocalAtlasService] = None
+
+
+def get_local_atlas_service() -> LocalAtlasService:
+    """Get the local atlas service singleton (lazy initialization)."""
+    global _local_atlas_service
+    if _local_atlas_service is None:
+        _local_atlas_service = LocalAtlasService()
+    return _local_atlas_service
+
+
+# Backwards compatibility - lazy proxy
+class _LazyLocalAtlasService:
+    """Lazy proxy for backwards compatibility with 'local_atlas_service' import."""
+
+    def __getattr__(self, name):
+        return getattr(get_local_atlas_service(), name)
+
+
+local_atlas_service = _LazyLocalAtlasService()
