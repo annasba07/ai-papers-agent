@@ -41,10 +41,22 @@ export default function GlobalNav() {
       <div className="global-nav__container">
         <Link href="/explore" className="global-nav__brand">
           <span className="global-nav__logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
-              <circle cx="16" cy="16" r="6" fill="currentColor" />
-              <path d="M16 2v6M16 24v6M2 16h6M24 16h6" stroke="currentColor" strokeWidth="2" />
+            {/* Compass Rose - Cartographic Atlas Icon */}
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              {/* Outer circle */}
+              <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+              {/* Inner detail circle */}
+              <circle cx="16" cy="16" r="10" stroke="currentColor" strokeWidth="0.75" fill="none" opacity="0.4"/>
+              {/* North pointer (filled) */}
+              <path d="M16 2L19 16L16 14L13 16L16 2Z" fill="currentColor"/>
+              {/* South pointer (outline) */}
+              <path d="M16 30L13 16L16 18L19 16L16 30Z" stroke="currentColor" strokeWidth="1" fill="none"/>
+              {/* East pointer (outline) */}
+              <path d="M30 16L16 13L18 16L16 19L30 16Z" stroke="currentColor" strokeWidth="1" fill="none"/>
+              {/* West pointer (filled) */}
+              <path d="M2 16L16 19L14 16L16 13L2 16Z" fill="currentColor"/>
+              {/* Center dot */}
+              <circle cx="16" cy="16" r="2" fill="currentColor"/>
             </svg>
           </span>
           <span className="global-nav__title">Paper Atlas</span>

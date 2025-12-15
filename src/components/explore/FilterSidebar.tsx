@@ -73,7 +73,7 @@ export default function FilterSidebar({
         {/* Mobile Header with Close */}
         <div className="sidebar-header">
           <div>
-            <h2 className="text-lg font-semibold" style={{ marginBottom: "0.25rem" }}>
+            <h2 className="text-lg font-semibold sidebar-header__title">
               Filters
             </h2>
             <span className="text-sm text-muted">
@@ -134,9 +134,8 @@ export default function FilterSidebar({
           Category
           {filters.category && (
             <button
-              className="text-xs text-accent"
+              className="filter-section__clear"
               onClick={() => onFilterChange("category", null)}
-              style={{ background: "none", border: "none", cursor: "pointer" }}
             >
               Clear
             </button>
@@ -168,9 +167,8 @@ export default function FilterSidebar({
           Difficulty
           {filters.difficulty && (
             <button
-              className="text-xs text-accent"
+              className="filter-section__clear"
               onClick={() => onFilterChange("difficulty", null)}
-              style={{ background: "none", border: "none", cursor: "pointer" }}
             >
               Clear
             </button>
@@ -202,12 +200,12 @@ export default function FilterSidebar({
       </div>
 
         {/* Stats Footer */}
-        <div className="sidebar-footer" style={{ marginTop: "auto", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+        <div className="sidebar-footer">
+          <div className="sidebar-footer__row">
             <span className="text-xs text-muted">Papers indexed</span>
             <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <div className="sidebar-footer__row">
             <span className="text-xs text-muted">Updated</span>
             <span className="text-xs font-medium">Just now</span>
           </div>
