@@ -229,8 +229,8 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
           {isLoading && (
             <div className="advisor-message advisor-message--assistant">
               <div className="advisor-message__content">
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <div className="spinner" style={{ width: 16, height: 16 }} />
+                <div className="advisor-loading">
+                  <div className="spinner spinner--sm" />
                   <span>Searching papers...</span>
                 </div>
               </div>
