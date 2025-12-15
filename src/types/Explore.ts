@@ -1,3 +1,28 @@
+export interface GitHubRepoStats {
+  url: string;
+  owner: string;
+  repo: string;
+  stars: number;
+  forks: number;
+  open_issues?: number;
+  language?: string;
+  license?: string;
+  pushed_at?: string;
+  is_archived?: boolean;
+  contributors?: number;
+  topics?: string[];
+}
+
+export interface GitHubSignals {
+  repos: GitHubRepoStats[];
+  total_stars: number;
+  updated_at?: string;
+}
+
+export interface ExternalSignals {
+  github?: GitHubSignals;
+}
+
 export interface ExplorePaper {
   id: string;
   title: string;
@@ -33,6 +58,8 @@ export interface ExplorePaper {
     };
   };
   code_repos?: string[];
+  // GitHub enrichment data
+  external_signals?: ExternalSignals;
 }
 
 export interface ExploreFilters {
