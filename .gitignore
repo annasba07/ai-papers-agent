@@ -85,3 +85,4 @@ pdf_download.log
 pdf_download_retry.log
 render_pages.log
 *.log
+backups/
