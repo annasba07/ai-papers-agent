@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
-    const response = await fetch(`${backendBase}/papers/contextual-search`, {
+    const response = await fetch(`${backendBase}/api/v1/papers/contextual-search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
