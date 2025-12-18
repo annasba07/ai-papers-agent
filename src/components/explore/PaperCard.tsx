@@ -546,11 +546,9 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
                   </svg>
                 </span>
                 <p className="paper-detail__placeholder-text">
-                  View benchmark results and state-of-the-art comparisons
+                  Benchmark results for this paper are not yet available
                 </p>
-                <button className="btn btn-secondary btn-sm">
-                  Load Benchmarks
-                </button>
+                <span className="badge badge-neutral">Coming Soon</span>
               </div>
             )}
           </div>
