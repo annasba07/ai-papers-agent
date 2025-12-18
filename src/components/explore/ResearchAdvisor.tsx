@@ -93,7 +93,7 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
 
     try {
       const response = await fetch(
-        API_BASE ? `${API_BASE}/papers/contextual-search` : "/api/contextual-search",
+        API_BASE ? `${API_BASE}/api/v1/papers/contextual-search` : "/api/contextual-search",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
