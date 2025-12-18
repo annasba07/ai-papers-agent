@@ -33,14 +33,32 @@ export async function GET(request: Request) {
     try {
       // Build query params for the database API
       const limit = searchParams.get('limit') || '40';
+      const offset = searchParams.get('offset') || '';
       const query = searchParams.get('query') || '';
       const category = searchParams.get('category') || 'all';
       const days = searchParams.get('days') || '';
+      const orderBy = searchParams.get('order_by') || '';
+      const orderDir = searchParams.get('order_dir') || '';
+
+      // Deep analysis filters
+      const hasDeepAnalysis = searchParams.get('has_deep_analysis') || '';
+      const minReproducibility = searchParams.get('min_reproducibility') || '';
+      const minImpactScore = searchParams.get('min_impact_score') || '';
+      const difficultyLevel = searchParams.get('difficulty_level') || '';
 
       const params = new URLSearchParams({ limit });
+      if (offset && parseInt(offset) > 0) params.set('offset', offset);
       if (query) params.set('query', query);
       if (category && category !== 'all') params.set('category', category);
       if (days && parseInt(days) > 0) params.set('days', days);
+      if (orderBy) params.set('order_by', orderBy);
+      if (orderDir) params.set('order_dir', orderDir);
+
+      // Forward deep analysis filters
+      if (hasDeepAnalysis === 'true') params.set('has_deep_analysis', 'true');
+      if (minReproducibility) params.set('min_reproducibility', minReproducibility);
+      if (minImpactScore) params.set('min_impact_score', minImpactScore);
+      if (difficultyLevel) params.set('difficulty_level', difficultyLevel);
 
       const response = await fetch(`${backendBase}/atlas-db/papers?${params.toString()}`);
       if (!response.ok) {
@@ -60,7 +78,13 @@ export async function GET(request: Request) {
         concepts: p.concepts || [],
       }));
 
-      return NextResponse.json({ papers }, { status: 200 });
+      return NextResponse.json({
+        papers,
+        total: data.total || papers.length,
+        has_more: data.has_more,
+        limit: data.limit,
+        offset: data.offset,
+      }, { status: 200 });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('Backend fetch failed, falling back to file:', message);
