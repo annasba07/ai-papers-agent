@@ -519,6 +519,29 @@ pre code {
   color: var(--color-success);
 }
 
+.badge-link {
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.badge-link:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.badge-link:focus {
+  outline: 2px solid var(--color-success);
+  outline-offset: 2px;
+}
+
+.badge-link:active {
+  transform: translateY(0);
+}
+
 .badge-muted {
   background: var(--color-bg-muted);
   color: var(--color-text-secondary);
