@@ -51,11 +51,11 @@ export default function ExplorePage() {
   const ITEMS_PER_PAGE = 30;
 
   // Fetch papers using hybrid search when there's a query
-  const fetchPapers = useCallback(async (loadMore = false) => {
+  const fetchPapers = useCallback(async (loadMore = false, overrideOffset?: number) => {
     if (loadMore && isLoadingMore.current) return;
     if (loadMore) isLoadingMore.current = true;
 
-    const currentOffset = loadMore ? offset : 0;
+    const currentOffset = typeof overrideOffset === 'number' ? overrideOffset : (loadMore ? offset : 0);
 
     if (!loadMore) {
       setLoading(true);
@@ -160,15 +160,15 @@ export default function ExplorePage() {
       setSemanticLoading(false);
       isLoadingMore.current = false;
     }
-  }, [searchQuery, filters, offset]);
+  }, [searchQuery, filters]);
 
   // Reset and fetch when search/filters change
   useEffect(() => {
     setOffset(0);
     setHasMore(true);
-    const debounce = setTimeout(() => fetchPapers(false), 300);
+    const debounce = setTimeout(() => fetchPapers(false, 0), 300);
     return () => clearTimeout(debounce);
-  }, [searchQuery, filters]);
+  }, [searchQuery, filters, fetchPapers]);
 
   // Infinite scroll observer
   useEffect(() => {
