@@ -30,6 +30,27 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [hasFetchedRelated, setHasFetchedRelated] = useState(false);
 
+  // Benchmark state
+  const [benchmarks, setBenchmarks] = useState<{
+    benchmarks: Array<{
+      dataset: string;
+      metric: string;
+      value: number;
+      model_name?: string;
+      rank: number;
+      total_entries: number;
+      percentile: number;
+      is_sota: boolean;
+      context: string;
+    }>;
+    sota_count: number;
+    top5_count: number;
+    summary: string;
+  } | null>(null);
+  const [benchmarksLoading, setBenchmarksLoading] = useState(false);
+  const [benchmarksError, setBenchmarksError] = useState<string | null>(null);
+  const [hasFetchedBenchmarks, setHasFetchedBenchmarks] = useState(false);
+
   // Fetch related papers when tab is activated
   useEffect(() => {
     if (isExpanded && activeTab === "related" && !hasFetchedRelated && !relatedLoading) {
@@ -57,6 +78,40 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
       fetchRelatedPapers();
     }
   }, [isExpanded, activeTab, hasFetchedRelated, relatedLoading, paper.id]);
+
+  // Fetch benchmarks when tab is activated
+  useEffect(() => {
+    if (isExpanded && activeTab === "benchmarks" && !hasFetchedBenchmarks && !benchmarksLoading) {
+      const fetchBenchmarks = async () => {
+        setBenchmarksLoading(true);
+        setBenchmarksError(null);
+        try {
+          const endpoint = API_BASE
+            ? `${API_BASE}/api/v1/leaderboards/paper/${paper.id}`
+            : `/api/leaderboards/paper/${paper.id}`;
+
+          const response = await fetch(endpoint);
+          if (!response.ok) {
+            if (response.status === 404) {
+              // No benchmarks found for this paper
+              setBenchmarks({ benchmarks: [], sota_count: 0, top5_count: 0, summary: "" });
+            } else {
+              throw new Error("Failed to fetch benchmarks");
+            }
+          } else {
+            const data = await response.json();
+            setBenchmarks(data);
+          }
+          setHasFetchedBenchmarks(true);
+        } catch (err) {
+          setBenchmarksError(err instanceof Error ? err.message : "Failed to load benchmarks");
+        } finally {
+          setBenchmarksLoading(false);
+        }
+      };
+      fetchBenchmarks();
+    }
+  }, [isExpanded, activeTab, hasFetchedBenchmarks, benchmarksLoading, paper.id]);
 
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return null;
@@ -537,18 +592,78 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
             )}
 
             {activeTab === "benchmarks" && (
-              <div className="paper-detail__placeholder">
-                <span className="paper-detail__placeholder-icon">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path d="M18 20V10" />
-                    <path d="M12 20V4" />
-                    <path d="M6 20v-6" />
-                  </svg>
-                </span>
-                <p className="paper-detail__placeholder-text">
-                  Benchmark results for this paper are not yet available
-                </p>
-                <span className="badge badge-neutral">Coming Soon</span>
+              <div className="paper-detail-benchmarks">
+                {benchmarksLoading && (
+                  <div className="paper-detail__loading">
+                    <div className="spinner spinner--sm" />
+                    <span>Loading benchmark results...</span>
+                  </div>
+                )}
+
+                {benchmarksError && (
+                  <div className="paper-detail__error">
+                    <p>{benchmarksError}</p>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        setHasFetchedBenchmarks(false);
+                        setBenchmarksError(null);
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {!benchmarksLoading && !benchmarksError && benchmarks && benchmarks.benchmarks.length === 0 && (
+                  <div className="paper-detail__placeholder">
+                    <span className="paper-detail__placeholder-icon">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M18 20V10" />
+                        <path d="M12 20V4" />
+                        <path d="M6 20v-6" />
+                      </svg>
+                    </span>
+                    <p className="paper-detail__placeholder-text">
+                      No benchmark results have been extracted from this paper yet
+                    </p>
+                  </div>
+                )}
+
+                {!benchmarksLoading && benchmarks && benchmarks.benchmarks.length > 0 && (
+                  <div className="benchmarks-list">
+                    {benchmarks.summary && (
+                      <p className="benchmarks-summary">{benchmarks.summary}</p>
+                    )}
+                    <div className="benchmarks-grid">
+                      {benchmarks.benchmarks.map((benchmark, i) => (
+                        <div key={i} className="benchmark-card">
+                          <div className="benchmark-card__header">
+                            <span className="benchmark-card__dataset">{benchmark.dataset}</span>
+                            {benchmark.is_sota && (
+                              <span className="badge badge-highlight">SOTA</span>
+                            )}
+                          </div>
+                          <div className="benchmark-card__value">
+                            <span className="benchmark-card__number">{benchmark.value}</span>
+                            <span className="benchmark-card__metric">{benchmark.metric}</span>
+                          </div>
+                          {benchmark.model_name && (
+                            <div className="benchmark-card__model">{benchmark.model_name}</div>
+                          )}
+                          <div className="benchmark-card__context">
+                            <span className="benchmark-card__rank">
+                              Rank #{benchmark.rank} of {benchmark.total_entries}
+                            </span>
+                            <span className="benchmark-card__percentile">
+                              Top {(100 - benchmark.percentile).toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

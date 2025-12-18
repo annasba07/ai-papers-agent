@@ -310,7 +310,23 @@ export default function ExplorePage() {
           <span className="text-secondary text-sm">
             {loading ? "Searching..." : (
               searchQuery
-                ? `${totalResults} results${searchTiming ? ` (${Math.round(searchTiming.total_ms)}ms)` : ''}`
+                ? (
+                  <>
+                    <span className="results-breakdown">
+                      <strong>{totalResults} results</strong>
+                      {hasSemanticResults && hasKeywordResults && (
+                        <span className="results-breakdown__detail">
+                          ({semanticPapers.length} AI-matched + {papers.length} keyword)
+                        </span>
+                      )}
+                      {searchTiming && (
+                        <span className="results-breakdown__timing">
+                          {Math.round(searchTiming.total_ms)}ms
+                        </span>
+                      )}
+                    </span>
+                  </>
+                )
                 : `${totalPapers.toLocaleString()} papers`
             )}
           </span>
@@ -479,14 +495,15 @@ export default function ExplorePage() {
               {/* Keyword Results Section */}
               {hasKeywordResults && (
                 <div className="keyword-results-section">
-                  {searchQuery && hasSemanticResults && (
-                    <div className="section-header">
+                  {searchQuery && (
+                    <div className="section-header section-header--keyword">
                       <div className="section-header__title">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <circle cx="11" cy="11" r="8" />
                           <path d="m21 21-4.35-4.35" />
                         </svg>
-                        <span>Additional Results</span>
+                        <span>{hasSemanticResults ? "More Results" : "All Results"}</span>
+                        <span className="section-header__count">{papers.length} papers</span>
                       </div>
                     </div>
                   )}
