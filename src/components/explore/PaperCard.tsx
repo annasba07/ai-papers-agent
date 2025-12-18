@@ -58,8 +58,10 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
     }
   }, [isExpanded, activeTab, hasFetchedRelated, relatedLoading, paper.id]);
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null | undefined) => {
+    if (!dateStr) return null;
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return null;
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
