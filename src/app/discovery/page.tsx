@@ -1,11 +1,24 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 // Types
+interface GitHubStats {
+  total_stars: number;
+  repo_count: number;
+  top_repo?: {
+    url: string;
+    stars: number;
+    forks: number;
+    language?: string;
+    pushed_at?: string;
+  };
+}
+
 interface DiscoveryStats {
   coverage: {
     total_papers: number;
@@ -17,6 +30,7 @@ interface DiscoveryStats {
     impact_scores: Record<string, number>;
     difficulty_levels: Record<string, number>;
     novelty_types: Record<string, number>;
+    categories: Record<string, number>;
   };
 }
 
@@ -30,6 +44,9 @@ interface ImpactPaper {
   industry_relevance?: string;
   executive_summary?: string;
   novelty_type?: string;
+  github_stats?: GitHubStats;
+  citation_count?: number;
+  influential_citation_count?: number;
 }
 
 interface TLDRPaper {
@@ -42,6 +59,7 @@ interface TLDRPaper {
   proposed_solution?: string;
   key_contribution?: string;
   reading_time_minutes?: number;
+  github_stats?: GitHubStats;
 }
 
 interface RisingPaper {
@@ -62,6 +80,7 @@ interface TechniquePaper {
   novelty_description?: string;
   methodology_approach?: string;
   key_components: string[];
+  github_stats?: GitHubStats;
 }
 
 interface ReproduciblePaper {
@@ -72,6 +91,7 @@ interface ReproduciblePaper {
   github_urls: string[];
   datasets_mentioned: string[];
   has_code: boolean;
+  github_stats?: GitHubStats;
 }
 
 interface HotTopic {
@@ -84,7 +104,29 @@ interface HotTopic {
   top_papers: Array<{ id: string; title: string; velocity: number; citations: number }>;
 }
 
-type TabId = "overview" | "impact" | "tldr" | "rising" | "techniques" | "reproducible" | "hot-topics";
+interface LearningPathPaper {
+  id: string;
+  title: string;
+  difficulty_level: string;
+  prerequisites: string[];
+  reading_time_minutes: number;
+  key_sections: string[];
+  summary?: string;
+}
+
+interface LearningPathLevel {
+  level: string;
+  description: string;
+  papers: LearningPathPaper[];
+}
+
+interface LearningPathData {
+  topic: string | null;
+  category: string | null;
+  path: LearningPathLevel[];
+}
+
+type TabId = "overview" | "impact" | "tldr" | "rising" | "techniques" | "reproducible" | "hot-topics" | "learning-path";
 
 const TABS: { id: TabId; label: string; icon: JSX.Element; description: string }[] = [
   {
@@ -168,10 +210,25 @@ const TABS: { id: TabId; label: string; icon: JSX.Element; description: string }
     ),
     description: "Papers with code & high reproducibility",
   },
+  {
+    id: "learning-path",
+    label: "Learning Path",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+      </svg>
+    ),
+    description: "Curated learning progression by difficulty",
+  },
 ];
 
 export default function DiscoveryPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as TabId | null;
+  const validTabs: TabId[] = ["overview", "impact", "tldr", "rising", "techniques", "reproducible", "hot-topics", "learning-path"];
+  const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : "overview";
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [stats, setStats] = useState<DiscoveryStats | null>(null);
   const [impactPapers, setImpactPapers] = useState<ImpactPaper[]>([]);
   const [tldrPapers, setTldrPapers] = useState<TLDRPaper[]>([]);
@@ -179,10 +236,13 @@ export default function DiscoveryPage() {
   const [techniquePapers, setTechniquePapers] = useState<TechniquePaper[]>([]);
   const [reproduciblePapers, setReproduciblePapers] = useState<ReproduciblePaper[]>([]);
   const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
+  const [learningPath, setLearningPath] = useState<LearningPathData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noveltyFilter, setNoveltyFilter] = useState<string | null>(null);
   const [noveltyDistribution, setNoveltyDistribution] = useState<Record<string, number>>({});
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [learningPathTopic, setLearningPathTopic] = useState<string>("");
 
   const fetchStats = useCallback(async () => {
     try {
@@ -198,8 +258,9 @@ export default function DiscoveryPage() {
   const fetchImpactPapers = useCallback(async () => {
     setLoading(true);
     try {
+      const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/impact?min_score=7&limit=20` : "/api/discovery/impact?min_score=7&limit=20"
+        API_BASE ? `${API_BASE}/discovery/impact?min_score=7&limit=20${categoryParam}` : `/api/discovery/impact?min_score=7&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch impact papers");
       const data = await response.json();
@@ -209,13 +270,14 @@ export default function DiscoveryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [categoryFilter]);
 
   const fetchTLDRPapers = useCallback(async () => {
     setLoading(true);
     try {
+      const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/tldr?days=7&limit=20` : "/api/discovery/tldr?days=7&limit=20"
+        API_BASE ? `${API_BASE}/discovery/tldr?days=7&limit=20${categoryParam}` : `/api/discovery/tldr?days=7&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch TL;DR papers");
       const data = await response.json();
@@ -225,13 +287,14 @@ export default function DiscoveryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [categoryFilter]);
 
   const fetchRisingPapers = useCallback(async () => {
     setLoading(true);
     try {
+      const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/rising?min_citations=5&limit=20` : "/api/discovery/rising?min_citations=5&limit=20"
+        API_BASE ? `${API_BASE}/discovery/rising?min_citations=5&limit=20${categoryParam}` : `/api/discovery/rising?min_citations=5&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch rising papers");
       const data = await response.json();
@@ -241,14 +304,14 @@ export default function DiscoveryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [categoryFilter]);
 
   const fetchTechniquePapers = useCallback(async () => {
     setLoading(true);
     try {
-      const url = noveltyFilter
-        ? `${API_BASE}/discovery/techniques?novelty_type=${noveltyFilter}&limit=20`
-        : `${API_BASE}/discovery/techniques?limit=20`;
+      const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
+      const noveltyParam = noveltyFilter ? `&novelty_type=${noveltyFilter}` : "";
+      const url = `${API_BASE}/discovery/techniques?limit=20${noveltyParam}${categoryParam}`;
       const response = await fetch(API_BASE ? url : url.replace(API_BASE, "/api"));
       if (!response.ok) throw new Error("Failed to fetch technique papers");
       const data = await response.json();
@@ -259,15 +322,16 @@ export default function DiscoveryPage() {
     } finally {
       setLoading(false);
     }
-  }, [noveltyFilter]);
+  }, [noveltyFilter, categoryFilter]);
 
   const fetchReproduciblePapers = useCallback(async () => {
     setLoading(true);
     try {
+      const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
         API_BASE
-          ? `${API_BASE}/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20`
-          : "/api/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20"
+          ? `${API_BASE}/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
+          : `/api/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch reproducible papers");
       const data = await response.json();
@@ -277,7 +341,7 @@ export default function DiscoveryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [categoryFilter]);
 
   const fetchHotTopics = useCallback(async () => {
     setLoading(true);
@@ -288,6 +352,27 @@ export default function DiscoveryPage() {
       if (!response.ok) throw new Error("Failed to fetch hot topics");
       const data = await response.json();
       setHotTopics(data.topics || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchLearningPath = useCallback(async (topic?: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "20" });
+      if (topic && topic.trim()) {
+        params.set("topic", topic.trim());
+      }
+      const url = API_BASE
+        ? `${API_BASE}/discovery/learning-path?${params.toString()}`
+        : `/api/discovery/learning-path?${params.toString()}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Failed to fetch learning path");
+      const data = await response.json();
+      setLearningPath(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -321,11 +406,16 @@ export default function DiscoveryPage() {
       case "hot-topics":
         fetchHotTopics();
         break;
+      case "learning-path":
+        fetchLearningPath(learningPathTopic);
+        break;
     }
-  }, [activeTab, fetchStats, fetchImpactPapers, fetchTLDRPapers, fetchRisingPapers, fetchTechniquePapers, fetchReproduciblePapers, fetchHotTopics]);
+  }, [activeTab, fetchStats, fetchImpactPapers, fetchTLDRPapers, fetchRisingPapers, fetchTechniquePapers, fetchReproduciblePapers, fetchHotTopics, fetchLearningPath, learningPathTopic]);
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return "Unknown date";
     const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "Unknown date";
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
@@ -343,6 +433,90 @@ export default function DiscoveryPage() {
     if (direction === "up") return "↑";
     if (direction === "down") return "↓";
     return "→";
+  };
+
+  const formatStars = (stars: number): string => {
+    if (stars >= 1000) {
+      return `${(stars / 1000).toFixed(1)}k`;
+    }
+    return stars.toString();
+  };
+
+  const formatRelativeTime = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
+    return `${Math.floor(diffDays / 365)}y ago`;
+  };
+
+  const isRecentlyUpdated = (dateStr: string): boolean => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays < 90;
+  };
+
+  const renderGitHubIndicator = (github_stats?: GitHubStats) => {
+    if (!github_stats || github_stats.total_stars === 0) return null;
+    const topRepo = github_stats.top_repo;
+    const isActive = topRepo?.pushed_at && isRecentlyUpdated(topRepo.pushed_at);
+
+    return (
+      <a
+        href={topRepo?.url || "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`discovery-github-indicator ${isActive ? "discovery-github-indicator--active" : ""}`}
+        title={`${github_stats.total_stars} stars${topRepo?.language ? ` • ${topRepo.language}` : ""}${topRepo?.pushed_at ? ` • Updated ${formatRelativeTime(topRepo.pushed_at)}` : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+        </svg>
+        <span className="discovery-github-indicator__stars">{formatStars(github_stats.total_stars)}</span>
+        {isActive && <span className="discovery-github-indicator__active" title="Recently updated" />}
+      </a>
+    );
+  };
+
+  const formatCitations = (count: number): string => {
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`;
+    }
+    return count.toString();
+  };
+
+  const renderCitationIndicator = (citation_count?: number, influential_citation_count?: number) => {
+    if (!citation_count || citation_count === 0) return null;
+    const influentialPct = influential_citation_count && citation_count > 0
+      ? Math.round((influential_citation_count / citation_count) * 100)
+      : 0;
+    const isHighlyInfluential = influentialPct >= 30;
+
+    return (
+      <span
+        className={`discovery-citation-indicator ${isHighlyInfluential ? "discovery-citation-indicator--influential" : ""}`}
+        title={`${citation_count} citations${influential_citation_count ? ` (${influential_citation_count} influential, ${influentialPct}%)` : ""}`}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 7 7 7 7" />
+          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 17 7 17 7" />
+          <path d="M4 22h16" />
+          <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+          <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+          <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+        </svg>
+        <span className="discovery-citation-indicator__count">{formatCitations(citation_count)}</span>
+        {isHighlyInfluential && <span className="discovery-citation-indicator__influential" title="High-quality citations" />}
+      </span>
+    );
   };
 
   return (
@@ -382,6 +556,30 @@ export default function DiscoveryPage() {
       <div className="discovery-tab-description">
         {TABS.find((t) => t.id === activeTab)?.description}
       </div>
+
+      {/* Category Filter Bar */}
+      {activeTab !== "overview" && activeTab !== "hot-topics" && activeTab !== "learning-path" && stats?.distributions.categories && (
+        <div className="discovery-category-filter">
+          <span className="discovery-category-filter__label">Filter by Category:</span>
+          <div className="discovery-category-filter__buttons">
+            <button
+              className={`discovery-filter-btn ${categoryFilter === null ? "discovery-filter-btn--active" : ""}`}
+              onClick={() => setCategoryFilter(null)}
+            >
+              All
+            </button>
+            {Object.entries(stats.distributions.categories).slice(0, 8).map(([cat, count]) => (
+              <button
+                key={cat}
+                className={`discovery-filter-btn ${categoryFilter === cat ? "discovery-filter-btn--active" : ""}`}
+                onClick={() => setCategoryFilter(cat)}
+              >
+                {cat} ({(count as number).toLocaleString()})
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Error State */}
       {error && (
@@ -506,6 +704,8 @@ export default function DiscoveryPage() {
                       <div className="discovery-paper-card__meta">
                         <span>{formatDate(paper.published)}</span>
                         <span>{paper.category}</span>
+                        {renderCitationIndicator(paper.citation_count, paper.influential_citation_count)}
+                        {renderGitHubIndicator(paper.github_stats)}
                       </div>
                     </article>
                   ))}
@@ -550,6 +750,8 @@ export default function DiscoveryPage() {
                       {paper.novelty_type && (
                         <span className="discovery-badge discovery-badge--small">{paper.novelty_type}</span>
                       )}
+                      {renderCitationIndicator(paper.citation_count, paper.influential_citation_count)}
+                      {renderGitHubIndicator(paper.github_stats)}
                     </div>
                   </div>
                   <div className="discovery-paper-row__actions">
@@ -585,6 +787,7 @@ export default function DiscoveryPage() {
                         {paper.reading_time_minutes} min read
                       </span>
                     )}
+                    {renderGitHubIndicator(paper.github_stats)}
                   </div>
                   <h3 className="discovery-tldr-card__title">
                     <a href={`https://arxiv.org/abs/${paper.id}`} target="_blank" rel="noopener noreferrer">
@@ -750,6 +953,7 @@ export default function DiscoveryPage() {
                       {paper.novelty_type && (
                         <span className="discovery-badge discovery-badge--technique">{paper.novelty_type}</span>
                       )}
+                      {renderGitHubIndicator(paper.github_stats)}
                     </div>
                     <h3 className="discovery-technique-card__title">
                       <a href={`https://arxiv.org/abs/${paper.id}`} target="_blank" rel="noopener noreferrer">
@@ -803,7 +1007,8 @@ export default function DiscoveryPage() {
                       {paper.code_availability && (
                         <span className="discovery-badge discovery-badge--code">{paper.code_availability}</span>
                       )}
-                      {paper.github_urls && paper.github_urls.length > 0 && (
+                      {renderGitHubIndicator(paper.github_stats)}
+                      {!paper.github_stats && paper.github_urls && paper.github_urls.length > 0 && (
                         <a
                           href={paper.github_urls[0]}
                           target="_blank"
@@ -828,6 +1033,126 @@ export default function DiscoveryPage() {
                   </div>
                 </article>
               ))
+            )}
+          </div>
+        )}
+
+        {/* Learning Path Tab */}
+        {activeTab === "learning-path" && (
+          <div className="discovery-learning-path">
+            {/* Topic Search */}
+            <div className="discovery-learning-path__search">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  fetchLearningPath(learningPathTopic);
+                }}
+                className="discovery-learning-path__form"
+              >
+                <input
+                  type="text"
+                  placeholder="Enter a topic (e.g., transformers, diffusion models)..."
+                  value={learningPathTopic}
+                  onChange={(e) => setLearningPathTopic(e.target.value)}
+                  className="discovery-learning-path__input"
+                />
+                <button type="submit" className="btn btn-primary">
+                  Generate Path
+                </button>
+              </form>
+              {learningPath?.topic && (
+                <p className="discovery-learning-path__current">
+                  Showing learning path for: <strong>{learningPath.topic}</strong>
+                </p>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="discovery-loading">
+                <div className="spinner" />
+                <span>Building your learning path...</span>
+              </div>
+            ) : learningPath?.path && learningPath.path.length > 0 ? (
+              <div className="discovery-learning-path__levels">
+                {learningPath.path.map((level, levelIndex) => (
+                  <div key={level.level} className="discovery-learning-level">
+                    <div className="discovery-learning-level__header">
+                      <span className="discovery-learning-level__badge" data-level={level.level}>
+                        {levelIndex + 1}. {level.level.charAt(0).toUpperCase() + level.level.slice(1)}
+                      </span>
+                      <span className="discovery-learning-level__desc">{level.description}</span>
+                    </div>
+                    <div className="discovery-learning-level__papers">
+                      {level.papers.map((paper, paperIndex) => (
+                        <article key={paper.id} className="discovery-learning-paper">
+                          <div className="discovery-learning-paper__order">
+                            {levelIndex + 1}.{paperIndex + 1}
+                          </div>
+                          <div className="discovery-learning-paper__content">
+                            <h4 className="discovery-learning-paper__title">
+                              <a
+                                href={`https://arxiv.org/abs/${paper.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {paper.title}
+                              </a>
+                            </h4>
+                            {paper.summary && (
+                              <p className="discovery-learning-paper__summary">{paper.summary}</p>
+                            )}
+                            <div className="discovery-learning-paper__meta">
+                              {paper.reading_time_minutes > 0 && (
+                                <span className="discovery-learning-paper__time">
+                                  <svg
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
+                                  {paper.reading_time_minutes} min
+                                </span>
+                              )}
+                              {paper.prerequisites && paper.prerequisites.length > 0 && (
+                                <span className="discovery-learning-paper__prereqs">
+                                  Prerequisites: {paper.prerequisites.join(", ")}
+                                </span>
+                              )}
+                            </div>
+                            {paper.key_sections && paper.key_sections.length > 0 && (
+                              <div className="discovery-learning-paper__sections">
+                                <span>Key sections:</span>
+                                {paper.key_sections.map((section, i) => (
+                                  <span key={i} className="discovery-technique-chip">
+                                    {section}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="discovery-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                  <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                </svg>
+                <h3>Build Your Learning Path</h3>
+                <p>
+                  Enter a topic above to generate a curated progression of papers from beginner to
+                  expert level.
+                </p>
+              </div>
             )}
           </div>
         )}

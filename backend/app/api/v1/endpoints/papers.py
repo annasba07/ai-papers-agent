@@ -529,19 +529,21 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             )
 
         # Step 2: Normalize papers for downstream synthesis
-        papers_for_response: List[Dict[str, str]] = []
+        papers_for_response: List[Dict[str, Any]] = []
         for paper in papers:
             title = paper.get("title", "").strip()
             summary = paper.get("abstract") or paper.get("summary") or ""
             link = paper.get("link") or f"http://arxiv.org/abs/{paper.get('id', '')}"
 
-            papers_for_response.append(
-                {
-                    "id": link or paper.get("id", ""),
-                    "title": title,
-                    "summary": summary,
-                }
-            )
+            paper_data: Dict[str, Any] = {
+                "id": link or paper.get("id", ""),
+                "title": title,
+                "summary": summary,
+            }
+            # Include relevance score for ranking transparency
+            if "score" in paper:
+                paper_data["relevance_score"] = round(float(paper["score"]), 3)
+            papers_for_response.append(paper_data)
 
         # Optional reranking step (saves 500-2000ms when skipped)
         if not skip_reranking:

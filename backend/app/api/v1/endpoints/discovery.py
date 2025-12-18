@@ -160,7 +160,10 @@ async def get_impact_dashboard(
             p.category,
             p.deep_analysis->'impact_assessment' as impact,
             p.deep_analysis->>'executive_summary' as executive_summary,
-            p.deep_analysis->'novelty_assessment'->>'novelty_type' as novelty_type
+            p.deep_analysis->'novelty_assessment'->>'novelty_type' as novelty_type,
+            p.external_signals->'github' as github_data,
+            p.citation_count,
+            p.influential_citation_count
         FROM papers p
         WHERE {where_clause}
         ORDER BY (p.deep_analysis->'impact_assessment'->>'impact_score')::int DESC,
@@ -173,7 +176,9 @@ async def get_impact_dashboard(
     papers = []
     for row in rows:
         impact = row["impact"] if isinstance(row["impact"], dict) else json.loads(row["impact"]) if row["impact"] else {}
-        papers.append({
+        github_data = row["github_data"] if isinstance(row["github_data"], dict) else json.loads(row["github_data"]) if row["github_data"] else None
+
+        paper_dict = {
             "id": row["id"],
             "title": row["title"],
             "published": row["published_date"].isoformat() if row["published_date"] else None,
@@ -184,7 +189,27 @@ async def get_impact_dashboard(
             "research_significance": impact.get("research_significance"),
             "executive_summary": row["executive_summary"],
             "novelty_type": row["novelty_type"],
-        })
+            "citation_count": row["citation_count"] or 0,
+            "influential_citation_count": row["influential_citation_count"] or 0,
+        }
+
+        # Add GitHub stats if available
+        if github_data and github_data.get("repos"):
+            repos = github_data["repos"]
+            top_repo = repos[0] if repos else None
+            paper_dict["github_stats"] = {
+                "total_stars": github_data.get("total_stars", 0),
+                "repo_count": len(repos),
+                "top_repo": {
+                    "url": top_repo.get("url"),
+                    "stars": top_repo.get("stars", 0),
+                    "forks": top_repo.get("forks", 0),
+                    "language": top_repo.get("language"),
+                    "pushed_at": top_repo.get("pushed_at"),
+                } if top_repo else None
+            }
+
+        papers.append(paper_dict)
 
     # Get distribution stats
     dist_query = """
@@ -346,7 +371,8 @@ async def get_techniques(
             p.id,
             p.title,
             p.deep_analysis->'novelty_assessment' as novelty,
-            p.deep_analysis->'methodology' as methodology
+            p.deep_analysis->'methodology' as methodology,
+            p.external_signals->'github' as github_data
         FROM papers p
         WHERE {where_clause}
         ORDER BY (p.deep_analysis->'impact_assessment'->>'impact_score')::int DESC
@@ -359,8 +385,9 @@ async def get_techniques(
     for row in rows:
         novelty = row["novelty"] if isinstance(row["novelty"], dict) else json.loads(row["novelty"]) if row["novelty"] else {}
         methodology = row["methodology"] if isinstance(row["methodology"], dict) else json.loads(row["methodology"]) if row["methodology"] else {}
+        github_data = row["github_data"] if isinstance(row["github_data"], dict) else json.loads(row["github_data"]) if row["github_data"] else None
 
-        papers.append({
+        paper_dict = {
             "id": row["id"],
             "title": row["title"],
             "novelty_type": novelty.get("novelty_type"),
@@ -368,7 +395,25 @@ async def get_techniques(
             "methodology_approach": methodology.get("approach"),
             "key_components": methodology.get("key_components", []),
             "architecture": methodology.get("architecture"),
-        })
+        }
+
+        # Add GitHub stats if available
+        if github_data and github_data.get("repos"):
+            repos = github_data["repos"]
+            top_repo = repos[0] if repos else None
+            paper_dict["github_stats"] = {
+                "total_stars": github_data.get("total_stars", 0),
+                "repo_count": len(repos),
+                "top_repo": {
+                    "url": top_repo.get("url"),
+                    "stars": top_repo.get("stars", 0),
+                    "forks": top_repo.get("forks", 0),
+                    "language": top_repo.get("language"),
+                    "pushed_at": top_repo.get("pushed_at"),
+                } if top_repo else None
+            }
+
+        papers.append(paper_dict)
 
     # Get novelty type distribution
     dist_query = """
@@ -450,7 +495,8 @@ async def get_tldr_feed(
             p.deep_analysis->>'problem_statement' as problem_statement,
             p.deep_analysis->>'proposed_solution' as proposed_solution,
             p.deep_analysis->'reader_guidance'->>'reading_time_minutes' as reading_time,
-            p.ai_analysis->>'keyContribution' as key_contribution
+            p.ai_analysis->>'keyContribution' as key_contribution,
+            p.external_signals->'github' as github_data
         FROM papers p
         WHERE {where_clause}
         ORDER BY p.published_date DESC
@@ -468,7 +514,9 @@ async def get_tldr_feed(
             except (ValueError, TypeError):
                 reading_time = None
 
-        papers.append({
+        github_data = row["github_data"] if isinstance(row["github_data"], dict) else json.loads(row["github_data"]) if row["github_data"] else None
+
+        paper_dict = {
             "id": row["id"],
             "title": row["title"],
             "published": row["published_date"].isoformat() if row["published_date"] else None,
@@ -478,7 +526,25 @@ async def get_tldr_feed(
             "proposed_solution": row["proposed_solution"],
             "key_contribution": row["key_contribution"],
             "reading_time_minutes": reading_time,
-        })
+        }
+
+        # Add GitHub stats if available
+        if github_data and github_data.get("repos"):
+            repos = github_data["repos"]
+            top_repo = repos[0] if repos else None
+            paper_dict["github_stats"] = {
+                "total_stars": github_data.get("total_stars", 0),
+                "repo_count": len(repos),
+                "top_repo": {
+                    "url": top_repo.get("url"),
+                    "stars": top_repo.get("stars", 0),
+                    "forks": top_repo.get("forks", 0),
+                    "language": top_repo.get("language"),
+                    "pushed_at": top_repo.get("pushed_at"),
+                } if top_repo else None
+            }
+
+        papers.append(paper_dict)
 
     return {
         "papers": papers,
@@ -543,7 +609,8 @@ async def get_reproducible_papers(
             p.title,
             p.deep_analysis->'technical_depth' as tech_depth,
             p.deep_analysis->'extracted_artifacts' as artifacts,
-            p.ai_analysis->>'hasCode' as has_code_flag
+            p.ai_analysis->>'hasCode' as has_code_flag,
+            p.external_signals->'github' as github_data
         FROM papers p
         WHERE {where_clause}
         ORDER BY (p.deep_analysis->'technical_depth'->>'reproducibility_score')::int DESC
@@ -556,6 +623,7 @@ async def get_reproducible_papers(
     for row in rows:
         tech_depth = row["tech_depth"] if isinstance(row["tech_depth"], dict) else json.loads(row["tech_depth"]) if row["tech_depth"] else {}
         artifacts = row["artifacts"] if isinstance(row["artifacts"], dict) else json.loads(row["artifacts"]) if row["artifacts"] else {}
+        github_data = row["github_data"] if isinstance(row["github_data"], dict) else json.loads(row["github_data"]) if row["github_data"] else None
 
         repro_score = tech_depth.get("reproducibility_score")
         if isinstance(repro_score, str):
@@ -564,7 +632,7 @@ async def get_reproducible_papers(
             except ValueError:
                 repro_score = None
 
-        papers.append({
+        paper_dict = {
             "id": row["id"],
             "title": row["title"],
             "reproducibility_score": repro_score,
@@ -573,7 +641,25 @@ async def get_reproducible_papers(
             "github_urls": artifacts.get("github_urls", []),
             "datasets_mentioned": artifacts.get("datasets_mentioned", []),
             "has_code": row["has_code_flag"] == "true",
-        })
+        }
+
+        # Add GitHub stats if available (richer data from external_signals)
+        if github_data and github_data.get("repos"):
+            repos = github_data["repos"]
+            top_repo = repos[0] if repos else None
+            paper_dict["github_stats"] = {
+                "total_stars": github_data.get("total_stars", 0),
+                "repo_count": len(repos),
+                "top_repo": {
+                    "url": top_repo.get("url"),
+                    "stars": top_repo.get("stars", 0),
+                    "forks": top_repo.get("forks", 0),
+                    "language": top_repo.get("language"),
+                    "pushed_at": top_repo.get("pushed_at"),
+                } if top_repo else None
+            }
+
+        papers.append(paper_dict)
 
     return {
         "papers": papers,
@@ -1204,6 +1290,19 @@ async def get_discovery_stats():
     """
     industry_dist = await database.fetch_all(industry_dist_query)
 
+    # Category distribution (top 10 categories)
+    category_dist_query = """
+        SELECT
+            category,
+            COUNT(*) as count
+        FROM papers
+        WHERE category IS NOT NULL AND category != ''
+        GROUP BY category
+        ORDER BY count DESC
+        LIMIT 10
+    """
+    category_dist = await database.fetch_all(category_dist_query)
+
     return {
         "coverage": {
             "total_papers": counts["total_papers"],
@@ -1218,6 +1317,7 @@ async def get_discovery_stats():
             "difficulty_levels": {row["level"]: row["count"] for row in difficulty_dist},
             "novelty_types": {row["type"]: row["count"] for row in novelty_dist},
             "industry_relevance": {row["relevance"]: row["count"] for row in industry_dist},
+            "categories": {row["category"]: row["count"] for row in category_dist},
         }
     }
 

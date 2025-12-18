@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__chrome_devtools__*, Bash(curl:*), Bash(jq:*), Bash(mkdir:*), Bash(date:*), Read(**), Write(**)
+allowed-tools: mcp__chrome-devtools__*, Bash(curl:*), Bash(jq:*), Bash(mkdir:*), Bash(date:*), Read(**), Write(**)
 description: Deep UX assessment through the eyes of a specific ML researcher persona
 ---
 

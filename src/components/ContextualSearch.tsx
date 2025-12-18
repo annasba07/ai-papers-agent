@@ -7,19 +7,34 @@ interface EmbeddingCache {
   active: boolean;
 }
 
-interface SearchResult {
-  analysis: string;
-  papers: {
-    id: string;
-    title: string;
-    summary: string;
-  }[];
+interface SearchPaper {
+  id: string;
+  title: string;
+  summary: string;
+  relevance_score?: number;
 }
 
-const searchSteps = [
+interface SearchResult {
+  analysis: string;
+  papers: SearchPaper[];
+  timing?: {
+    total_ms: number;
+    retrieval_ms: number;
+    rerank_ms: number;
+    synthesis_ms: number;
+    mode: string;
+  };
+}
+
+const quickSearchSteps = [
+  'Searching papers...',
+  'Ranking results...',
+];
+
+const deepSearchSteps = [
   'Analyzing your project description...',
   'Searching relevant papers...',
-  'Generating insights...',
+  'Generating AI insights...',
   'Finalizing recommendations...',
 ];
 
@@ -33,6 +48,8 @@ const ContextualSearch = () => {
   const [backendReady, setBackendReady] = useState<boolean | null>(null);
   const [embeddingOptions, setEmbeddingOptions] = useState<EmbeddingCache[]>([]);
   const [embeddingLabel, setEmbeddingLabel] = useState<string>('');
+  const [searchMode, setSearchMode] = useState<'quick' | 'deep'>('quick');
+  const searchSteps = searchMode === 'quick' ? quickSearchSteps : deepSearchSteps;
 
   useEffect(() => {
     const checkBackend = async () => {
@@ -92,19 +109,25 @@ const ContextualSearch = () => {
     setError(null);
 
     try {
-      const progressIntervals = [800, 1200, 1500, 2000];
-
+      // Step 0: Start search
       setCurrentStep(0);
-      await new Promise((resolve) => setTimeout(resolve, progressIntervals[0]));
 
-      setCurrentStep(1);
-      await new Promise((resolve) => setTimeout(resolve, progressIntervals[1]));
-
-      setCurrentStep(2);
+      // Build payload with mode-specific flags
       const payload: Record<string, unknown> = { description };
       if (embeddingLabel) {
         payload.embedding_label = embeddingLabel;
       }
+
+      // Quick mode: skip expensive operations for fast results
+      // Deep mode: full AI analysis with reranking and synthesis
+      if (searchMode === 'quick') {
+        payload.skip_reranking = true;
+        payload.skip_synthesis = true;
+      }
+
+      // Step 1: Ranking (Quick) or Processing (Deep)
+      setCurrentStep(1);
+
       const response = await fetch('/api/contextual-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,10 +138,17 @@ const ContextualSearch = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setCurrentStep(3);
-      await new Promise((resolve) => setTimeout(resolve, progressIntervals[3]));
+      // For deep mode, show additional steps as response processes
+      if (searchMode === 'deep') {
+        setCurrentStep(2);
+      }
 
       const data = (await response.json()) as SearchResult;
+
+      if (searchMode === 'deep') {
+        setCurrentStep(3);
+      }
+
       setResults(data);
       setIsComplete(true);
     } catch (err) {
@@ -168,13 +198,43 @@ const ContextualSearch = () => {
           className="form-control contextual-search__textarea"
         />
         <div className="contextual-search__actions">
+          <div className="contextual-search__mode-toggle">
+            <label className="contextual-search__mode-label">
+              <input
+                type="radio"
+                name="searchMode"
+                value="quick"
+                checked={searchMode === 'quick'}
+                onChange={() => setSearchMode('quick')}
+                disabled={loading}
+              />
+              <span className="contextual-search__mode-option">
+                <strong>Quick</strong>
+                <small>~1-2s, fast semantic search</small>
+              </span>
+            </label>
+            <label className="contextual-search__mode-label">
+              <input
+                type="radio"
+                name="searchMode"
+                value="deep"
+                checked={searchMode === 'deep'}
+                onChange={() => setSearchMode('deep')}
+                disabled={loading}
+              />
+              <span className="contextual-search__mode-option">
+                <strong>Deep</strong>
+                <small>~3-8s, AI-powered analysis</small>
+              </span>
+            </label>
+          </div>
           <button
             onClick={handleSearch}
             disabled={loading || backendReady === false || backendReady === null}
             className="btn btn-primary contextual-search__submit"
             type="button"
           >
-            {loading ? 'Analyzing…' : 'Analyze Project'}
+            {loading ? 'Analyzing…' : searchMode === 'quick' ? 'Quick Search' : 'Deep Analysis'}
           </button>
         </div>
       </div>
@@ -194,6 +254,18 @@ const ContextualSearch = () => {
 
       {results && (
         <div className="contextual-search__results">
+          {results.timing && (
+            <div className="contextual-search__timing">
+              <span className="contextual-search__timing-badge">
+                Completed in {(results.timing.total_ms / 1000).toFixed(1)}s
+              </span>
+              {results.timing.mode && (
+                <span className="contextual-search__timing-mode">
+                  {results.timing.mode === 'fast' ? 'Quick mode' : 'Deep analysis'}
+                </span>
+              )}
+            </div>
+          )}
           <div>
             <h3 className="contextual-search__heading section-title">Analysis Report</h3>
             <article className="card contextual-search__analysis">{results.analysis}</article>
@@ -214,6 +286,19 @@ const ContextualSearch = () => {
                   <div className="paper-content">
                     <h4 className="contextual-paper-title">{paper.title}</h4>
                     <p className="contextual-paper-summary">{paper.summary}</p>
+                    {paper.relevance_score !== undefined && (
+                      <div className="contextual-paper-relevance" title="Relevance: 85% semantic similarity + 15% keyword match">
+                        <span className="contextual-paper-relevance__bar">
+                          <span
+                            className="contextual-paper-relevance__fill"
+                            style={{ width: `${Math.min(paper.relevance_score * 100, 100)}%` }}
+                          />
+                        </span>
+                        <span className="contextual-paper-relevance__score">
+                          {(paper.relevance_score * 100).toFixed(0)}% match
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="paper-arrow">→</div>
                 </a>
