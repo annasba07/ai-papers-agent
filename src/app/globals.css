@@ -799,6 +799,96 @@ body {
   gap: var(--space-2);
 }
 
+.paper-card__meta-item--impact {
+  position: relative;
+}
+
+/* Impact Score Tooltip */
+.impact-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+}
+
+.impact-tooltip__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.impact-tooltip__trigger:hover,
+.impact-tooltip__trigger:focus {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.impact-tooltip__content {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--color-text);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+  z-index: 100;
+}
+
+.impact-tooltip__content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--color-border);
+}
+
+.impact-tooltip:hover .impact-tooltip__content,
+.impact-tooltip:focus-within .impact-tooltip__content {
+  opacity: 1;
+  visibility: visible;
+}
+
+.impact-tooltip__content strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+}
+
+.impact-tooltip__content span {
+  display: block;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.impact-tooltip__content ul {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.impact-tooltip__content li {
+  margin-bottom: 2px;
+}
+
 .paper-card__actions {
   display: flex;
   gap: var(--space-3);

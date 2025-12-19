@@ -292,8 +292,31 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
         )}
 
         {impactScore && (
-          <span className="paper-card__meta-item">
+          <span className="paper-card__meta-item paper-card__meta-item--impact">
             Impact: {impactScore}/10
+            <span className="impact-tooltip">
+              <button
+                type="button"
+                className="impact-tooltip__trigger"
+                aria-label="Impact score methodology"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+              </button>
+              <span className="impact-tooltip__content">
+                <strong>Impact Score (1-10)</strong>
+                <span>AI-assessed measure combining:</span>
+                <ul>
+                  <li>Novelty of contributions</li>
+                  <li>Potential research influence</li>
+                  <li>Practical applicability</li>
+                  <li>Technical significance</li>
+                </ul>
+              </span>
+            </span>
           </span>
         )}
 
