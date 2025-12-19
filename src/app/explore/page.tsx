@@ -78,8 +78,7 @@ export default function ExplorePage() {
         params.append("category", filters.category);
       }
       if (filters.hasCode) {
-        params.append("has_deep_analysis", "true");
-        params.append("min_reproducibility", "6");
+        params.append("has_code", "true");
       }
       if (filters.highImpact) {
         params.append("has_deep_analysis", "true");
@@ -203,12 +202,12 @@ export default function ExplorePage() {
   const hasKeywordResults = papers.length > 0;
   const totalResults = semanticPapers.length + papers.length;
 
-  // Starter prompts for inline advisor intro
+  // Starter prompts for inline advisor intro - diverse, accessible examples
   const STARTER_PROMPTS = [
-    "Latest advances in LLM reasoning",
-    "Techniques for reducing hallucinations",
-    "Efficient fine-tuning methods",
-    "State-of-the-art multimodal learning",
+    "How to make AI explain its decisions",
+    "Speed up neural network training",
+    "AI for medical image diagnosis",
+    "Build more accurate chatbots",
   ];
 
   const handleStarterPromptClick = (prompt: string) => {
@@ -503,8 +502,14 @@ export default function ExplorePage() {
                           <path d="m21 21-4.35-4.35" />
                         </svg>
                         <span>{hasSemanticResults ? "More Results" : "All Results"}</span>
+                        <span className="badge badge-keyword">Keyword Match</span>
                         <span className="section-header__count">{papers.length} papers</span>
                       </div>
+                      {searchTiming && (
+                        <span className="section-header__timing">
+                          {Math.round(searchTiming.keyword_ms || 0)}ms
+                        </span>
+                      )}
                     </div>
                   )}
 

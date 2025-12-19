@@ -61,6 +61,7 @@ async def get_papers(
     has_deep_analysis: Optional[bool] = Query(default=None, description="Filter papers with/without deep analysis"),
     min_reproducibility: Optional[int] = Query(default=None, ge=1, le=10, description="Minimum reproducibility score (1-10)"),
     novelty_type: Optional[str] = Query(default=None, description="Filter by novelty type (architectural, algorithmic, etc.)"),
+    has_code: Optional[bool] = Query(default=None, description="Filter papers with/without associated code repositories"),
 ):
     """
     Get papers from the database with filtering and pagination.
@@ -82,6 +83,7 @@ async def get_papers(
     - **has_deep_analysis**: Filter papers with/without deep PDF analysis
     - **min_reproducibility**: Minimum reproducibility score (1-10)
     - **novelty_type**: Filter by novelty type (architectural, algorithmic, application, etc.)
+    - **has_code**: Filter papers with/without associated code repositories
     """
     # Build query dynamically
     conditions = []
@@ -138,6 +140,13 @@ async def get_papers(
         conditions.append("p.deep_analysis->'novelty_assessment'->>'novelty_type' = :novelty_type")
         params["novelty_type"] = novelty_type
 
+    # Code availability filter - checks code_repos JSONB array
+    if has_code is not None:
+        if has_code:
+            conditions.append("(p.code_repos IS NOT NULL AND jsonb_array_length(p.code_repos) > 0)")
+        else:
+            conditions.append("(p.code_repos IS NULL OR jsonb_array_length(p.code_repos) = 0)")
+
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
     # Validate and set order
@@ -160,6 +169,9 @@ async def get_papers(
             p.published_date,
             p.category,
             p.citation_count,
+            p.code_repos,
+            p.external_signals,
+            p.deep_analysis,
             COALESCE(
                 (SELECT array_agg(c.name)
                  FROM paper_concepts pc
@@ -199,7 +211,10 @@ async def get_papers(
             "category": row["category"],
             "link": link,
             "citation_count": row["citation_count"] or 0,
-            "concepts": row["concepts"] or []
+            "concepts": row["concepts"] or [],
+            "code_repos": row["code_repos"],
+            "external_signals": row["external_signals"],
+            "deep_analysis": row["deep_analysis"]
         })
 
     return {

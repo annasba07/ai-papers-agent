@@ -10,12 +10,12 @@ interface ResearchAdvisorProps {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-// Starter prompts to help users get started
+// Starter prompts to help users get started - diverse, accessible examples
 const STARTER_PROMPTS = [
-  "Latest advances in LLM reasoning",
-  "Techniques for reducing model hallucinations",
-  "Efficient fine-tuning methods for transformers",
-  "State-of-the-art in multimodal learning",
+  "How to make AI explain its decisions",
+  "Speed up neural network training",
+  "AI for medical image diagnosis",
+  "Build more accurate chatbots",
 ];
 
 // Generate follow-up suggestions based on context
