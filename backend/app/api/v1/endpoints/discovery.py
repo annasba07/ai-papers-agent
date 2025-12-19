@@ -444,7 +444,7 @@ async def get_techniques(
 @router.get("/tldr", response_model=dict)
 async def get_tldr_feed(
     category: Optional[str] = Query(default=None),
-    days: Optional[int] = Query(default=7, description="Papers from last N days"),
+    days: Optional[int] = Query(default=90, description="Papers from last N days (default 90 for deep analysis availability)"),
     min_impact: Optional[int] = Query(default=None, ge=1, le=10),
     limit: int = Query(default=20, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
@@ -999,10 +999,10 @@ class HotTopic(BaseModel):
 
 @router.get("/hot-topics", response_model=dict)
 async def get_hot_topics(
-    days: int = Query(default=30, ge=7, le=365, description="Timeframe for trend calculation"),
+    days: int = Query(default=180, ge=7, le=365, description="Timeframe for trend calculation (default 6 months for citation accumulation)"),
     min_papers: int = Query(default=3, ge=1, le=50, description="Minimum papers per topic"),
     category: Optional[str] = Query(default=None, description="Filter to arXiv category"),
-    min_citations: int = Query(default=5, ge=1, description="Minimum citations per paper"),
+    min_citations: int = Query(default=1, ge=1, description="Minimum citations per paper"),
     limit: int = Query(default=20, ge=1, le=100),
 ):
     """
