@@ -3,10 +3,12 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useBookmarks } from "@/contexts/BookmarkContext";
 
 const navItems = [
   { href: "/explore", label: "Explore", icon: "compass" },
   { href: "/discovery", label: "Discovery", icon: "spark" },
+  { href: "/reading-list", label: "Reading List", icon: "bookmark" },
   { href: "/generate", label: "Generate", icon: "code" },
 ];
 
@@ -28,11 +30,17 @@ const icons: Record<string, React.ReactNode> = {
       <polyline points="8 6 2 12 8 18" />
     </svg>
   ),
+  bookmark: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+    </svg>
+  ),
 };
 
 export default function GlobalNav() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { bookmarkCount } = useBookmarks();
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -88,6 +96,9 @@ export default function GlobalNav() {
                 >
                   <span className="global-nav__icon">{icons[item.icon]}</span>
                   <span className="global-nav__label">{item.label}</span>
+                  {item.href === "/reading-list" && bookmarkCount > 0 && (
+                    <span className="global-nav__badge">{bookmarkCount}</span>
+                  )}
                 </Link>
               </li>
             ))}
