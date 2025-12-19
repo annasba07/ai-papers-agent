@@ -372,6 +372,28 @@ body {
   max-width: 1000px;
 }
 
+/* Explore Header */
+.explore-header {
+  text-align: center;
+  margin-bottom: var(--space-8);
+}
+
+.explore-header__title {
+  font-size: var(--text-4xl);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+  letter-spacing: -0.02em;
+}
+
+.explore-header__subtitle {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
 .explore-search {
   display: flex;
   gap: var(--space-4);

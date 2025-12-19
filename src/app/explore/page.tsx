@@ -226,6 +226,14 @@ export default function ExplorePage() {
       />
 
       <main className="explore-main">
+        {/* Page Header */}
+        <header className="explore-header">
+          <h1 className="explore-header__title">Explore</h1>
+          <p className="explore-header__subtitle">
+            Search and filter AI research papers by topic, code availability, and impact
+          </p>
+        </header>
+
         {/* Search Bar */}
         <form className="explore-search" onSubmit={handleSearch}>
           {/* Mobile Filter Toggle */}
