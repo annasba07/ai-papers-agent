@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { ExplorePaper } from "@/types/Explore";
+import { useBookmarks } from "@/contexts/BookmarkContext";
 
 interface SimilarPaper {
   id: string;
@@ -24,6 +25,7 @@ interface PaperCardProps {
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
 export default function PaperCard({ paper, isExpanded, onToggleExpand, variant = "default" }: PaperCardProps) {
+  const { isBookmarked, toggleBookmark } = useBookmarks();
   const [activeTab, setActiveTab] = useState<"summary" | "related" | "benchmarks">("summary");
   const [relatedPapers, setRelatedPapers] = useState<SimilarPaper[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
@@ -356,6 +358,19 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
         )}
 
         <div className="paper-card__actions">
+          <button
+            className={`paper-card__bookmark ${isBookmarked(paper.id) ? "paper-card__bookmark--active" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleBookmark(paper.id);
+            }}
+            aria-label={isBookmarked(paper.id) ? "Remove from reading list" : "Add to reading list"}
+            title={isBookmarked(paper.id) ? "Remove from reading list" : "Add to reading list"}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={isBookmarked(paper.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
           <button className="paper-card__expand" onClick={onToggleExpand}>
             {isExpanded ? "Collapse" : "Expand"}
             <svg

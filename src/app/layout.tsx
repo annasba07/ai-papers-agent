@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import GlobalNav from "@/components/GlobalNav";
+import { BookmarkProvider } from "@/contexts/BookmarkContext";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-sans",
@@ -34,10 +35,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${jakarta.variable} ${jetbrains.variable}`}>
-        <GlobalNav />
-        <div className="main-content">
-          {children}
-        </div>
+        <BookmarkProvider>
+          <GlobalNav />
+          <div className="main-content">
+            {children}
+          </div>
+        </BookmarkProvider>
       </body>
     </html>
   );
