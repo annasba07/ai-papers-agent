@@ -5,7 +5,9 @@ const rawBase =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   '';
 
-const backendBase = rawBase.replace(/\/$/, '');
+// Normalize the base URL: strip trailing slash and any /api/v1 suffix
+// This allows both "http://localhost:8000" and "http://localhost:8000/api/v1" to work
+const backendBase = rawBase.replace(/\/$/, '').replace(/\/api\/v1$/, '');
 const backendEnabled = backendBase.length > 0;
 
 export const runtime = 'nodejs';
