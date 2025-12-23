@@ -28,6 +28,13 @@ const difficulties = [
   { value: "expert", label: "Expert" },
 ];
 
+const timeRanges = [
+  { value: 7, label: "Last 7 days" },
+  { value: 30, label: "Last 30 days" },
+  { value: 90, label: "Last 90 days" },
+  { value: 365, label: "Last year" },
+];
+
 export default function FilterSidebar({
   filters,
   onFilterChange,
@@ -182,6 +189,32 @@ export default function FilterSidebar({
               onClick={() => onFilterChange("difficulty", filters.difficulty === diff.value ? null : diff.value)}
             >
               {diff.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Time Range Filter */}
+      <div className="filter-section">
+        <h3 className="filter-section__title">
+          Time Range
+          {filters.timeRange && (
+            <button
+              className="filter-section__clear"
+              onClick={() => onFilterChange("timeRange", null)}
+            >
+              Clear
+            </button>
+          )}
+        </h3>
+        <div className="filter-chips">
+          {timeRanges.map((range) => (
+            <button
+              key={range.value}
+              className={`chip ${filters.timeRange === range.value ? "chip-active" : ""}`}
+              onClick={() => onFilterChange("timeRange", filters.timeRange === range.value ? null : range.value)}
+            >
+              {range.label}
             </button>
           ))}
         </div>

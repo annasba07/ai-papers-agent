@@ -10,6 +10,18 @@ import type { ExplorePaper, ExploreFilters } from "@/types/Explore";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
+// Session storage key for persisting explore state
+const EXPLORE_SESSION_KEY = "explore_session";
+
+interface ExploreSessionState {
+  searchQuery: string;
+  filters: ExploreFilters;
+  timestamp: number;
+}
+
+// Session expiry: 30 minutes
+const SESSION_EXPIRY_MS = 30 * 60 * 1000;
+
 interface HybridSearchResult {
   semanticResults: ExplorePaper[];
   keywordResults: ExplorePaper[];
@@ -22,6 +34,37 @@ interface HybridSearchResult {
   };
   searchMode: 'hybrid' | 'keyword_only' | 'semantic_only';
 }
+
+// Helper to get initial state from sessionStorage
+function getInitialSessionState(): { searchQuery: string; filters: ExploreFilters } | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const stored = sessionStorage.getItem(EXPLORE_SESSION_KEY);
+    if (!stored) return null;
+
+    const session: ExploreSessionState = JSON.parse(stored);
+
+    // Check if session has expired
+    if (Date.now() - session.timestamp > SESSION_EXPIRY_MS) {
+      sessionStorage.removeItem(EXPLORE_SESSION_KEY);
+      return null;
+    }
+
+    return { searchQuery: session.searchQuery, filters: session.filters };
+  } catch {
+    return null;
+  }
+}
+
+const defaultFilters: ExploreFilters = {
+  hasCode: false,
+  highImpact: false,
+  difficulty: null,
+  category: null,
+  sortBy: "recent",
+  timeRange: null,
+};
 
 export default function ExplorePage() {
   const [papers, setPapers] = useState<ExplorePaper[]>([]);
@@ -37,16 +80,38 @@ export default function ExplorePage() {
   const [searchTiming, setSearchTiming] = useState<{ semantic_ms: number; total_ms: number } | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [sessionRestored, setSessionRestored] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const isLoadingMore = useRef(false);
 
-  const [filters, setFilters] = useState<ExploreFilters>({
-    hasCode: false,
-    highImpact: false,
-    difficulty: null,
-    category: null,
-    sortBy: "recent",
-  });
+  const [filters, setFilters] = useState<ExploreFilters>(defaultFilters);
+
+  // Restore session state on mount
+  useEffect(() => {
+    const session = getInitialSessionState();
+    if (session) {
+      setSearchQuery(session.searchQuery);
+      setFilters(session.filters);
+    }
+    setSessionRestored(true);
+  }, []);
+
+  // Save session state when search or filters change
+  useEffect(() => {
+    if (!sessionRestored) return; // Don't save until initial restore is done
+
+    const sessionState: ExploreSessionState = {
+      searchQuery,
+      filters,
+      timestamp: Date.now(),
+    };
+
+    try {
+      sessionStorage.setItem(EXPLORE_SESSION_KEY, JSON.stringify(sessionState));
+    } catch {
+      // Ignore storage errors (e.g., private browsing)
+    }
+  }, [searchQuery, filters, sessionRestored]);
 
   const ITEMS_PER_PAGE = 30;
 
@@ -86,6 +151,9 @@ export default function ExplorePage() {
       }
       if (filters.difficulty) {
         params.append("difficulty_level", filters.difficulty);
+      }
+      if (filters.timeRange) {
+        params.append("days", String(filters.timeRange));
       }
 
       // Use hybrid search API when there's a query, otherwise use keyword-only
@@ -247,7 +315,7 @@ export default function ExplorePage() {
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
             <span className="mobile-filter-toggle__count">
-              {[filters.hasCode, filters.highImpact, filters.category, filters.difficulty].filter(Boolean).length || ""}
+              {[filters.hasCode, filters.highImpact, filters.category, filters.difficulty, filters.timeRange].filter(Boolean).length || ""}
             </span>
           </button>
 
@@ -271,7 +339,7 @@ export default function ExplorePage() {
         </form>
 
         {/* Active Filters */}
-        {(filters.hasCode || filters.highImpact || filters.difficulty || filters.category) && (
+        {(filters.hasCode || filters.highImpact || filters.difficulty || filters.category || filters.timeRange) && (
           <div className="explore-active-filters">
             {filters.hasCode && (
               <span className="chip chip-active">
@@ -297,15 +365,15 @@ export default function ExplorePage() {
                 <button onClick={() => handleFilterChange("category", null)}>&times;</button>
               </span>
             )}
+            {filters.timeRange && (
+              <span className="chip chip-active">
+                Last {filters.timeRange} days
+                <button onClick={() => handleFilterChange("timeRange", null)}>&times;</button>
+              </span>
+            )}
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => setFilters({
-                hasCode: false,
-                highImpact: false,
-                difficulty: null,
-                category: null,
-                sortBy: "recent",
-              })}
+              onClick={() => setFilters(defaultFilters)}
             >
               Clear all
             </button>
@@ -558,6 +626,25 @@ export default function ExplorePage() {
         isOpen={advisorOpen}
         onClose={() => setAdvisorOpen(false)}
       />
+
+      {/* Floating Action Button for Advisor - Always visible */}
+      {!advisorOpen && (
+        <button
+          className="advisor-fab"
+          onClick={() => setAdvisorOpen(true)}
+          aria-label="Open Research Advisor"
+          title="Ask Research Advisor"
+        >
+          <span className="advisor-fab__icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </span>
+          <span className="advisor-fab__pulse"></span>
+        </button>
+      )}
     </div>
   );
 }

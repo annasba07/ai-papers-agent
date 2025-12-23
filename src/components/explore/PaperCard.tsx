@@ -216,6 +216,16 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
             {impactScore && impactScore >= 7 && (
               <span className="badge badge-highlight">High Impact</span>
             )}
+            {paper.citation_count >= 100 && (
+              <span className="badge badge-foundational" title={`${paper.citation_count.toLocaleString()} citations`}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5" />
+                  <path d="M2 12l10 5 10-5" />
+                </svg>
+                Foundational
+              </span>
+            )}
             {githubStats && githubStats.total_stars >= 100 && (
               <span className="badge badge-github">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">

@@ -68,6 +68,7 @@ export interface ExploreFilters {
   difficulty: "beginner" | "intermediate" | "advanced" | "expert" | null;
   category: string | null;
   sortBy: "recent" | "citations" | "impact";
+  timeRange: number | null; // Days - null means all time
 }
 
 export interface TrendingTopic {
