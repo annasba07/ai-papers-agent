@@ -523,6 +523,28 @@ class LocalAtlasService(LoggerMixin):
     # Lexical utilities
 
     @staticmethod
+    def _levenshtein_distance(s1: str, s2: str) -> int:
+        """Calculate Levenshtein (edit) distance between two strings."""
+        if len(s1) < len(s2):
+            s1, s2 = s2, s1
+        if len(s2) == 0:
+            return len(s1)
+
+        prev_row = list(range(len(s2) + 1))
+        for i, c1 in enumerate(s1):
+            curr_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                # Cost is 0 if characters match, 1 otherwise
+                cost = 0 if c1 == c2 else 1
+                curr_row.append(min(
+                    prev_row[j + 1] + 1,      # deletion
+                    curr_row[j] + 1,          # insertion
+                    prev_row[j] + cost        # substitution
+                ))
+            prev_row = curr_row
+        return prev_row[-1]
+
+    @staticmethod
     def _simple_stem(word: str) -> str:
         """Lightweight stemmer for common English suffixes in academic papers."""
         if len(word) <= 3:
@@ -546,26 +568,44 @@ class LocalAtlasService(LoggerMixin):
 
     @staticmethod
     def _keyword_overlap(query: str, document: str) -> float:
-        """Calculate keyword overlap with stemming for better matching."""
+        """Calculate keyword overlap with stemming and fuzzy matching."""
         # Tokenize and stem query tokens
-        query_tokens = {
+        query_tokens = [
             LocalAtlasService._simple_stem(token)
-            for token in query.split()
+            for token in query.lower().split()
             if len(token) > 2
-        }
+        ]
         if not query_tokens:
             return 0.0
 
-        # Check for matches (exact stem or stem contained in document)
+        # Tokenize document for fuzzy matching
         doc_lower = document.lower()
-        matches = 0
+        doc_words = [w for w in doc_lower.split() if len(w) > 2]
+
+        matches = 0.0
         for stem in query_tokens:
-            # Check if stem appears in document (substring match)
+            # Priority 1: Exact substring match (1.0 score)
             if stem in doc_lower:
-                matches += 1
-            # Also check for common plurals/variants
-            elif stem + "s" in doc_lower or stem + "es" in doc_lower:
-                matches += 0.8  # Slight penalty for indirect match
+                matches += 1.0
+                continue
+
+            # Priority 2: Plural variants (0.8 score)
+            if stem + "s" in doc_lower or stem + "es" in doc_lower:
+                matches += 0.8
+                continue
+
+            # Priority 3: Fuzzy match for typos (0.6 for 1 edit, 0.5 for 2 edits)
+            # Only check words of similar length to avoid false positives
+            best_fuzzy = 0.0
+            for doc_word in doc_words:
+                if abs(len(doc_word) - len(stem)) > 2:
+                    continue
+                dist = LocalAtlasService._levenshtein_distance(stem, doc_word)
+                if dist == 1 and len(stem) >= 4:
+                    best_fuzzy = max(best_fuzzy, 0.6)
+                elif dist == 2 and len(stem) >= 6:
+                    best_fuzzy = max(best_fuzzy, 0.5)
+            matches += best_fuzzy
 
         return matches / len(query_tokens)
 
