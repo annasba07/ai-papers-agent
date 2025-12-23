@@ -523,11 +523,50 @@ class LocalAtlasService(LoggerMixin):
     # Lexical utilities
 
     @staticmethod
+    def _simple_stem(word: str) -> str:
+        """Lightweight stemmer for common English suffixes in academic papers."""
+        if len(word) <= 3:
+            return word
+        # Handle common suffixes (order matters - check longer ones first)
+        suffixes = [
+            ("ational", "ate"), ("tional", "tion"), ("ization", "ize"),
+            ("fulness", "ful"), ("ousness", "ous"), ("iveness", "ive"),
+            ("ation", "ate"), ("ement", ""), ("ness", ""), ("ment", ""),
+            ("ence", ""), ("ance", ""), ("able", ""), ("ible", ""),
+            ("ity", ""), ("ive", ""), ("ful", ""), ("ous", ""),
+            ("ing", ""), ("tion", ""), ("sion", ""), ("ies", "y"),
+            ("ied", "y"), ("ler", "le"), ("ler", "le"),
+            ("ers", ""), ("ed", ""), ("er", ""), ("es", ""), ("ly", ""),
+            ("s", ""),
+        ]
+        for suffix, replacement in suffixes:
+            if word.endswith(suffix) and len(word) > len(suffix) + 2:
+                return word[:-len(suffix)] + replacement
+        return word
+
+    @staticmethod
     def _keyword_overlap(query: str, document: str) -> float:
-        query_tokens = {token for token in query.split() if len(token) > 2}
+        """Calculate keyword overlap with stemming for better matching."""
+        # Tokenize and stem query tokens
+        query_tokens = {
+            LocalAtlasService._simple_stem(token)
+            for token in query.split()
+            if len(token) > 2
+        }
         if not query_tokens:
             return 0.0
-        matches = sum(1 for token in query_tokens if token in document)
+
+        # Check for matches (exact stem or stem contained in document)
+        doc_lower = document.lower()
+        matches = 0
+        for stem in query_tokens:
+            # Check if stem appears in document (substring match)
+            if stem in doc_lower:
+                matches += 1
+            # Also check for common plurals/variants
+            elif stem + "s" in doc_lower or stem + "es" in doc_lower:
+                matches += 0.8  # Slight penalty for indirect match
+
         return matches / len(query_tokens)
 
     def _load_cached_embeddings(
