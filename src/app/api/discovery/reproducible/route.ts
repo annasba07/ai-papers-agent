@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     if (codeAvailability) params.set('code_availability', codeAvailability);
     if (category && category !== 'all') params.set('category', category);
 
-    const response = await fetch(`${backendBase}/discovery/reproducible?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/reproducible?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

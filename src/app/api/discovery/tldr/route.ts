@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     if (minImpact) params.set('min_impact', minImpact);
     if (category && category !== 'all') params.set('category', category);
 
-    const response = await fetch(`${backendBase}/discovery/tldr?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/tldr?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

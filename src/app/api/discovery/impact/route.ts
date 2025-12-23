@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     if (category && category !== 'all') params.set('category', category);
     if (days) params.set('days', days);
 
-    const response = await fetch(`${backendBase}/discovery/impact?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/impact?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

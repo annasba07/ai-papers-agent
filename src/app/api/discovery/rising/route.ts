@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     if (category && category !== 'all') params.set('category', category);
     if (velocityTier) params.set('velocity_tier', velocityTier);
 
-    const response = await fetch(`${backendBase}/discovery/rising?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/rising?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

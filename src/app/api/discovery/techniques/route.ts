@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (noveltyType && noveltyType !== 'all') params.set('novelty_type', noveltyType);
     if (category && category !== 'all') params.set('category', category);
 
-    const response = await fetch(`${backendBase}/discovery/techniques?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/techniques?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);

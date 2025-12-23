@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     if (category && category !== 'all') params.set('category', category);
     if (difficultyLevel && difficultyLevel !== 'all') params.set('difficulty_level', difficultyLevel);
 
-    const response = await fetch(`${backendBase}/discovery/learning-path?${params.toString()}`);
+    const response = await fetch(`${backendBase}/api/v1/discovery/learning-path?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
