@@ -116,8 +116,13 @@ for i in "${!PERSONAS[@]}"; do
     echo -e "  ${color}PID: ${PIDS[$i]} | Model: sonnet | Chrome: ${chrome}${NC}"
     echo -e "  ${color}Screenshots: ${rel_screenshot_dir}${NC}"
 
-    # Small delay between launches to avoid race conditions
-    sleep 2
+    # Longer delay between launches to avoid API rate limiting
+    # When multiple Claude sessions start simultaneously, some may get rate-limited
+    # and exit silently. Staggering launches by 15s gives each session time to initialize.
+    if [ $i -lt $((${#PERSONAS[@]} - 1)) ]; then
+        echo -e "  ${YELLOW}Waiting 15s before next launch (avoiding rate limits)...${NC}"
+        sleep 15
+    fi
 done
 
 echo ""
@@ -152,20 +157,37 @@ echo -e "${GREEN}   All assessments complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Check for generated reports
+# Check for generated reports and diagnose failures
 echo -e "${CYAN}Generated reports:${NC}"
+failed_count=0
 for i in "${!PERSONAS[@]}"; do
     persona="${PERSONAS[$i]}"
     name="${PERSONA_NAMES[$i]}"
     report_file="$RUN_DIR/persona-$((i+1))-$persona.md"
+    log_file="$LOG_DIR/persona-$((i+1))-$persona.log"
 
     if [ -f "$report_file" ]; then
         size=$(wc -c < "$report_file" | tr -d ' ')
         echo -e "  ${GREEN}[OK]${NC} $name -> persona-$((i+1))-$persona.md (${size} bytes)"
     else
-        echo -e "  ${RED}[MISSING]${NC} $name -> persona-$((i+1))-$persona.md"
+        log_size=$(wc -c < "$log_file" 2>/dev/null | tr -d ' ' || echo "0")
+        if [ "$log_size" -lt 10 ]; then
+            echo -e "  ${RED}[FAILED]${NC} $name -> Session terminated early (log: ${log_size} bytes)"
+            echo -e "         ${YELLOW}Likely cause: API rate limiting or MCP connection failure${NC}"
+        else
+            echo -e "  ${RED}[INCOMPLETE]${NC} $name -> Session ran but no report (log: ${log_size} bytes)"
+            echo -e "         ${YELLOW}Likely cause: Context exhaustion before report writing${NC}"
+        fi
+        failed_count=$((failed_count + 1))
     fi
 done
+
+if [ $failed_count -gt 0 ]; then
+    echo ""
+    echo -e "${YELLOW}⚠ $failed_count persona(s) failed to complete. Consider:${NC}"
+    echo -e "  ${YELLOW}1. Re-running the swarm (transient API issues)${NC}"
+    echo -e "  ${YELLOW}2. Running failed personas individually with: claude --model sonnet${NC}"
+fi
 
 echo ""
 echo -e "${CYAN}Screenshots captured:${NC}"

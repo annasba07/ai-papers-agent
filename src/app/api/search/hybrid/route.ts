@@ -129,6 +129,7 @@ export async function GET(request: NextRequest) {
 
     // Process semantic results
     let semanticPapers: KeywordPaper[] = [];
+    let semanticError: string | null = null;
     if (semanticResponse.status === 'fulfilled' && semanticResponse.value) {
       const response = semanticResponse.value;
       if (response.ok) {
@@ -145,12 +146,19 @@ export async function GET(request: NextRequest) {
           _source: 'semantic' as const,
           _relevanceScore: 1.0, // Semantic results are pre-ranked
         }));
+      } else {
+        semanticError = `Semantic search failed: ${response.status}`;
+        console.warn('[Hybrid Search]', semanticError);
       }
+    } else if (semanticResponse.status === 'rejected') {
+      semanticError = `Semantic search error: ${semanticResponse.reason}`;
+      console.warn('[Hybrid Search]', semanticError);
     }
 
     // Process keyword results
     let keywordPapers: KeywordPaper[] = [];
     let totalKeyword = 0;
+    let keywordError: string | null = null;
     if (keywordResponse.status === 'fulfilled') {
       const response = keywordResponse.value;
       if (response.ok) {
@@ -160,7 +168,23 @@ export async function GET(request: NextRequest) {
           _source: 'keyword' as const,
         }));
         totalKeyword = data.total || keywordPapers.length;
+      } else {
+        keywordError = `Keyword search failed: ${response.status}`;
+        console.warn('[Hybrid Search]', keywordError);
       }
+    } else if (keywordResponse.status === 'rejected') {
+      keywordError = `Keyword search error: ${keywordResponse.reason}`;
+      console.warn('[Hybrid Search]', keywordError);
+    }
+
+    // Log if both searches failed
+    if (semanticPapers.length === 0 && keywordPapers.length === 0) {
+      console.error('[Hybrid Search] Both searches returned 0 results', {
+        query,
+        semanticError,
+        keywordError,
+        timing,
+      });
     }
 
     // Deduplicate: semantic results take priority
