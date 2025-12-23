@@ -212,6 +212,8 @@ async def get_similar_papers(
 
         return papers
 
+    except HTTPException:
+        raise  # Re-raise HTTPException without modification
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -291,6 +293,8 @@ async def get_papers_by_concept(
 
         return papers
 
+    except HTTPException:
+        raise  # Re-raise HTTPException without modification
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -513,6 +517,8 @@ async def get_benchmark_leaderboard(
 
         return leaderboard
 
+    except HTTPException:
+        raise  # Re-raise HTTPException without modification
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
