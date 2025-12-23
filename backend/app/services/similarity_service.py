@@ -80,7 +80,7 @@ class SimilarityService:
         """
 
         results = await database.fetch_all(
-            text(query),
+            query,
             {
                 "paper_id": paper_id,
                 "min_similarity": min_similarity,
