@@ -363,8 +363,10 @@ class LocalAtlasService(LoggerMixin):
             keyword_score = self._keyword_overlap(query_lower, record["_search_text"])
             semantic_score = scores[idx] if scores is not None else 0.0
 
-            # Hybrid scoring: mostly semantic, with a small lexical boost.
-            combined = (semantic_score * 0.85) + (keyword_score * 0.15)
+            # Hybrid scoring: balanced semantic and lexical matching.
+            # Increased keyword weight from 0.15 to 0.35 to improve relevance
+            # for queries where exact terms matter.
+            combined = (semantic_score * 0.65) + (keyword_score * 0.35)
             candidates.append((idx, combined))
 
         if not candidates:
