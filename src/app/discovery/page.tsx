@@ -243,6 +243,7 @@ export default function DiscoveryPage() {
   const [error, setError] = useState<string | null>(null);
   const [noveltyFilter, setNoveltyFilter] = useState<string | null>(null);
   const [noveltyDistribution, setNoveltyDistribution] = useState<Record<string, number>>({});
+  const [frameworkFilter, setFrameworkFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [learningPathTopic, setLearningPathTopic] = useState<string>("");
 
@@ -970,44 +971,81 @@ export default function DiscoveryPage() {
         )}
 
         {/* Techniques Tab */}
-        {activeTab === "techniques" && (
-          <div className="discovery-techniques">
-            <div className="discovery-techniques__filters">
-              <button
-                className={`discovery-filter-btn ${noveltyFilter === null ? "discovery-filter-btn--active" : ""}`}
-                onClick={() => setNoveltyFilter(null)}
-              >
-                All
-              </button>
-              {Object.entries(noveltyDistribution).map(([type, count]) => (
-                <button
-                  key={type}
-                  className={`discovery-filter-btn ${noveltyFilter === type ? "discovery-filter-btn--active" : ""}`}
-                  onClick={() => setNoveltyFilter(type)}
-                >
-                  {type} ({count})
-                </button>
-              ))}
-            </div>
-            <div className="discovery-list">
-              {loading ? (
-                <div className="discovery-loading">
-                  <div className="spinner" />
-                  <span>Loading techniques...</span>
+        {activeTab === "techniques" && (() => {
+          // Compute framework distribution from all papers
+          const frameworkCounts: Record<string, number> = {};
+          const papersWithFrameworks = techniquePapers.map((paper) => {
+            const frameworks = detectFrameworks(paper.methodology_approach, paper.key_components);
+            frameworks.forEach((fw) => {
+              frameworkCounts[fw] = (frameworkCounts[fw] || 0) + 1;
+            });
+            return { ...paper, frameworks };
+          });
+
+          // Filter papers by framework
+          const filteredPapers = frameworkFilter
+            ? papersWithFrameworks.filter((p) => p.frameworks.includes(frameworkFilter))
+            : papersWithFrameworks;
+
+          return (
+            <div className="discovery-techniques">
+              <div className="discovery-techniques__filters">
+                <div className="discovery-techniques__filters-row">
+                  <span className="discovery-techniques__filters-label">Novelty:</span>
+                  <button
+                    className={`discovery-filter-btn ${noveltyFilter === null ? "discovery-filter-btn--active" : ""}`}
+                    onClick={() => setNoveltyFilter(null)}
+                  >
+                    All
+                  </button>
+                  {Object.entries(noveltyDistribution).slice(0, 5).map(([type, count]) => (
+                    <button
+                      key={type}
+                      className={`discovery-filter-btn ${noveltyFilter === type ? "discovery-filter-btn--active" : ""}`}
+                      onClick={() => setNoveltyFilter(type)}
+                    >
+                      {type} ({count})
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                techniquePapers.map((paper) => {
-                  const frameworks = detectFrameworks(
-                    paper.methodology_approach,
-                    paper.key_components
-                  );
-                  return (
+                {Object.keys(frameworkCounts).length > 0 && (
+                  <div className="discovery-techniques__filters-row">
+                    <span className="discovery-techniques__filters-label">Framework:</span>
+                    <button
+                      className={`discovery-filter-btn ${frameworkFilter === null ? "discovery-filter-btn--active" : ""}`}
+                      onClick={() => setFrameworkFilter(null)}
+                    >
+                      All
+                    </button>
+                    {Object.entries(frameworkCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 6)
+                      .map(([framework, count]) => (
+                        <button
+                          key={framework}
+                          className={`discovery-filter-btn discovery-filter-btn--framework ${frameworkFilter === framework ? "discovery-filter-btn--active" : ""}`}
+                          onClick={() => setFrameworkFilter(framework)}
+                        >
+                          {framework} ({count})
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+              <div className="discovery-list">
+                {loading ? (
+                  <div className="discovery-loading">
+                    <div className="spinner" />
+                    <span>Loading techniques...</span>
+                  </div>
+                ) : (
+                  filteredPapers.map((paper) => (
                     <article key={paper.id} className="discovery-technique-card">
                       <div className="discovery-technique-card__header">
                         {paper.novelty_type && (
                           <span className="discovery-badge discovery-badge--technique">{paper.novelty_type}</span>
                         )}
-                        {renderFrameworkBadges(frameworks)}
+                        {renderFrameworkBadges(paper.frameworks)}
                         {renderGitHubIndicator(paper.github_stats)}
                       </div>
                     <h3 className="discovery-technique-card__title">
@@ -1031,12 +1069,12 @@ export default function DiscoveryPage() {
                       </div>
                     )}
                   </article>
-                  );
-                })
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Reproducible Tab */}
         {activeTab === "reproducible" && (
