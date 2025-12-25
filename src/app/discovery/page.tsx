@@ -773,6 +773,13 @@ export default function DiscoveryPage() {
                 <div className="spinner" />
                 <span>Loading summaries...</span>
               </div>
+            ) : tldrPapers.length === 0 ? (
+              <div className="discovery-empty-state">
+                <p>No recent papers with executive summaries found from the last 7 days.</p>
+                <p className="discovery-empty-state__hint">
+                  Papers typically get summaries after deep analysis. Try adjusting the time range or check back later.
+                </p>
+              </div>
             ) : (
               tldrPapers.map((paper) => (
                 <article key={paper.id} className="discovery-tldr-card">

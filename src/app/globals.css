@@ -1931,6 +1931,63 @@ body {
   gap: var(--space-2);
 }
 
+.filter-chips .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  transition: all 0.2s ease;
+}
+
+.filter-chips .chip-clickable {
+  cursor: pointer;
+}
+
+.filter-chips .chip-clickable:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+  transform: translateY(-1px);
+}
+
+.filter-chips .chip-skeleton {
+  width: 80px;
+  height: 28px;
+  background: linear-gradient(90deg, var(--color-bg-subtle) 25%, var(--color-bg-muted) 50%, var(--color-bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border: none;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.chip-trend {
+  font-size: 10px;
+  color: var(--color-success);
+  margin-left: var(--space-1);
+}
+
+.filter-section__badge {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: var(--color-success-subtle);
+  color: var(--color-success);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: var(--font-bold);
+  margin-left: var(--space-2);
+}
+
 .filter-section__clear {
   background: none;
   border: none;
@@ -4316,6 +4373,31 @@ body {
 
 .discovery-loading__text {
   font-size: var(--text-base);
+  color: var(--color-text-muted);
+}
+
+/* Empty State */
+.discovery-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  gap: var(--space-2);
+  text-align: center;
+  color: var(--color-text-muted);
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.discovery-empty-state p:first-child {
+  font-size: var(--text-lg);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.discovery-empty-state__hint {
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
