@@ -503,6 +503,50 @@ export default function DiscoveryPage() {
     ));
   };
 
+  const isProductionReady = (paper: {
+    has_code?: boolean;
+    reproducibility_score?: number;
+    github_stats?: GitHubStats;
+  }): boolean => {
+    // Production ready criteria (all must be met):
+    // 1. Has code available
+    if (!paper.has_code) return false;
+
+    // 2. High reproducibility (7+/10)
+    if (!paper.reproducibility_score || paper.reproducibility_score < 7) return false;
+
+    // 3. GitHub repo with community adoption (50+ stars) OR active maintenance
+    if (paper.github_stats) {
+      const stars = paper.github_stats.total_stars || 0;
+      const pushedAt = paper.github_stats.top_repo?.pushed_at;
+      const recentlyUpdated = pushedAt && isRecentlyUpdated(pushedAt);
+
+      // Either has good community adoption OR is actively maintained
+      if (stars >= 50 || recentlyUpdated) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const renderProductionReadyBadge = (paper: {
+    has_code?: boolean;
+    reproducibility_score?: number;
+    github_stats?: GitHubStats;
+  }) => {
+    if (!isProductionReady(paper)) return null;
+
+    return (
+      <span
+        className="discovery-production-badge"
+        title="Production Ready: High reproducibility (7+), active code repository, and community adoption"
+      >
+        ✓ Production Ready
+      </span>
+    );
+  };
+
   const renderGitHubIndicator = (github_stats?: GitHubStats) => {
     if (!github_stats || github_stats.total_stars === 0) return null;
     const topRepo = github_stats.top_repo;
@@ -1098,6 +1142,7 @@ export default function DiscoveryPage() {
                       </a>
                     </h3>
                     <div className="discovery-paper-row__meta">
+                      {renderProductionReadyBadge(paper)}
                       {paper.code_availability && (
                         <span className="discovery-badge discovery-badge--code">{paper.code_availability}</span>
                       )}
