@@ -2,6 +2,7 @@
 API endpoints for paper operations
 """
 import time
+import asyncio
 from fastapi import APIRouter, HTTPException, Query, Body
 from typing import List, Dict, Any, Optional
 import json
@@ -615,8 +616,25 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             )
         else:
             try:
-                synthesis_response = await ai_analysis_service.model.generate_content_async(synthesis_prompt)
+                # Add 25-second timeout to prevent hanging (leaves 5s buffer before frontend 30s timeout)
+                synthesis_response = await asyncio.wait_for(
+                    ai_analysis_service.model.generate_content_async(synthesis_prompt),
+                    timeout=25.0
+                )
                 analysis_text = synthesis_response.text
+            except asyncio.TimeoutError:
+                fallback_mode = True
+                bullet_points = "\n".join(
+                    [
+                        f"- {paper.get('title', 'Untitled')} — inspect its methodology for actionable leads."
+                        for paper in papers_for_response[:3]
+                    ]
+                )
+                analysis_text = (
+                    "AI synthesis took too long. "
+                    "Here is a quick brief of promising papers:\n"
+                    f"{bullet_points}"
+                )
             except Exception:
                 fallback_mode = True
                 bullet_points = "\n".join(

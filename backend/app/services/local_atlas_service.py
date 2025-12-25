@@ -44,6 +44,8 @@ class LocalAtlasService(LoggerMixin):
         self._default_cache_label: Optional[str] = (
             settings.ATLAS_EMBED_CACHE_LABEL.strip() if settings.ATLAS_EMBED_CACHE_LABEL else None
         )
+        # Pre-computed word sets for fast keyword matching (optimization)
+        self._doc_word_sets: List[Set[str]] = []
 
         atlas_path = Path(settings.ATLAS_DERIVED_DIR).expanduser().resolve()
         catalog_path = atlas_path / "papers_catalog.ndjson"
@@ -79,6 +81,12 @@ class LocalAtlasService(LoggerMixin):
         self._load_summary_files(atlas_path)
         self._record_ids = [record.get("id") for record in self._records]
         documents = [record["_search_text"] for record in self._records]
+
+        # Pre-compute word sets for fast keyword matching (optimization)
+        self._doc_word_sets = [
+            set(w for w in doc.split() if len(w) > 2)
+            for doc in documents
+        ]
         cache_dir = Path(settings.ATLAS_EMBED_CACHE_DIR).expanduser().resolve()
         self._cache_dir = cache_dir
         try:
@@ -304,6 +312,68 @@ class LocalAtlasService(LoggerMixin):
         query_vec = self._get_query_embedding(query)
         return np.dot(self._embeddings, query_vec)
 
+    def _stem(self, word: str) -> str:
+        """Apply lightweight stemming to reduce word to root form.
+
+        Uses simple suffix stripping for common English suffixes.
+        This is a fast heuristic that handles most academic text well.
+        """
+        word = word.lower()
+        # Common suffixes in order of specificity
+        suffixes = [
+            'ization', 'isation', 'ational', 'tional', 'ation',
+            'ities', 'ously', 'ively', 'iness', 'ments',
+            'ness', 'less', 'ment', 'able', 'ible', 'tion',
+            'sion', 'ical', 'ally', 'ized', 'ised',
+            'ity', 'ive', 'ful', 'ous', 'ing', 'ion',
+            'ly', 'ed', 'er', 'es', 's'
+        ]
+        for suffix in suffixes:
+            if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+                return word[:-len(suffix)]
+        return word
+
+    def _keyword_overlap_fast(
+        self,
+        query_stems: List[str],
+        doc_word_set: Set[str],
+        search_text: str,
+    ) -> float:
+        """Calculate keyword overlap score between query stems and document.
+
+        Uses pre-computed word sets for fast matching, with fallback to
+        stemmed comparison for better recall.
+
+        Args:
+            query_stems: List of stemmed query terms
+            doc_word_set: Pre-computed set of words from the document
+            search_text: Original document text (for stemmed fallback)
+
+        Returns:
+            Score between 0.0 and 1.0 indicating keyword overlap
+        """
+        if not query_stems:
+            return 0.0
+
+        matches = 0
+        doc_lower = search_text.lower()
+
+        # Stem the document words for better matching
+        doc_stems = {self._stem(w) for w in doc_word_set}
+
+        for stem in query_stems:
+            # Exact stem match in pre-computed stems
+            if stem in doc_stems:
+                matches += 1
+            # Substring match for partial terms (e.g., "transform" matches "transformer")
+            elif any(stem in doc_stem or doc_stem in stem for doc_stem in doc_stems if len(doc_stem) >= 4):
+                matches += 0.7
+            # Fallback: check if stem appears anywhere in text
+            elif stem in doc_lower:
+                matches += 0.5
+
+        return min(1.0, matches / len(query_stems))
+
     def get_cache_stats(self) -> Dict[str, object]:
         """Return query embedding cache statistics."""
         global _query_embedding_cache, _query_cache_hits, _query_cache_misses
@@ -350,6 +420,9 @@ class LocalAtlasService(LoggerMixin):
         now = datetime.utcnow()
         cutoff = now - timedelta(days=max_age_days) if max_age_days else None
 
+        # Precompute query stems once (optimization - avoids repeated tokenization)
+        query_stems = [self._stem(w) for w in query_lower.split() if len(w) > 2]
+
         candidates: List[Tuple[int, float]] = []
 
         # Precompute lexical scores for fallback/hybrid ranking.
@@ -360,7 +433,12 @@ class LocalAtlasService(LoggerMixin):
             if cutoff and published_dt and published_dt < cutoff:
                 continue
 
-            keyword_score = self._keyword_overlap(query_lower, record["_search_text"])
+            # Use fast keyword overlap with precomputed word sets
+            keyword_score = self._keyword_overlap_fast(
+                query_stems,
+                self._doc_word_sets[idx] if idx < len(self._doc_word_sets) else set(),
+                record["_search_text"]
+            )
             semantic_score = scores[idx] if scores is not None else 0.0
 
             # Hybrid scoring: balanced semantic and lexical matching.
@@ -608,6 +686,35 @@ class LocalAtlasService(LoggerMixin):
             matches += best_fuzzy
 
         return matches / len(query_tokens)
+
+    @staticmethod
+    def _keyword_overlap_fast(query_stems: List[str], doc_word_set: Set[str], doc_text: str) -> float:
+        """
+        Fast keyword overlap using pre-computed word sets.
+
+        Optimizations:
+        1. Uses pre-computed word sets instead of tokenizing on each call
+        2. Set membership checks (O(1)) instead of substring search
+        3. Skips expensive fuzzy matching - relies on stemming instead
+        """
+        if not query_stems:
+            return 0.0
+
+        matches = 0.0
+        for stem in query_stems:
+            # Priority 1: Direct set membership (O(1)) or substring check
+            if stem in doc_word_set or stem in doc_text:
+                matches += 1.0
+                continue
+
+            # Priority 2: Check common plural variants in set
+            if (stem + "s") in doc_word_set or (stem + "es") in doc_word_set:
+                matches += 0.8
+                continue
+
+            # Skip expensive fuzzy matching for speed - stemming should handle most cases
+
+        return matches / len(query_stems)
 
     def _load_cached_embeddings(
         self,

@@ -71,6 +71,7 @@ interface RisingPaper {
   citation_velocity: number;
   months_since_publication: number;
   link: string;
+  github_stats?: GitHubStats;
 }
 
 interface TechniquePaper {
@@ -858,6 +859,7 @@ export default function DiscoveryPage() {
                       <span>{paper.citation_count} total citations</span>
                       <span>{paper.months_since_publication.toFixed(1)} months old</span>
                       <span>{paper.category}</span>
+                      {renderGitHubIndicator(paper.github_stats)}
                     </div>
                   </div>
                   <div className="discovery-paper-row__trend">

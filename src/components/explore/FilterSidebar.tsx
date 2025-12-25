@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ExploreFilters } from "@/types/Explore";
+
+interface TrendingConcept {
+  id: number;
+  name: string;
+  category: string;
+  total_papers: number;
+  recent_papers: number;
+  growth_percentage: number;
+}
 
 interface FilterSidebarProps {
   filters: ExploreFilters;
@@ -9,6 +18,7 @@ interface FilterSidebarProps {
   totalPapers: number;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
+  onTopicClick?: (topicName: string) => void;
 }
 
 const categories = [
@@ -35,13 +45,41 @@ const timeRanges = [
   { value: 365, label: "Last year" },
 ];
 
+// Fallback topics when API is unavailable
+const fallbackTopics = ["LLM Agents", "Mixture of Experts", "RLHF", "Diffusion", "RAG"];
+
 export default function FilterSidebar({
   filters,
   onFilterChange,
   totalPapers,
   isMobileOpen = false,
   onMobileClose,
+  onTopicClick,
 }: FilterSidebarProps) {
+  const [trendingTopics, setTrendingTopics] = useState<TrendingConcept[]>([]);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(true);
+
+  // Fetch trending topics from API
+  useEffect(() => {
+    const fetchTrendingTopics = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/knowledge-graph/concepts/trending?limit=5`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setTrendingTopics(data);
+        }
+      } catch {
+        // Silently fail, will use fallback topics
+      } finally {
+        setIsLoadingTopics(false);
+      }
+    };
+
+    fetchTrendingTopics();
+  }, []);
+
   // Handle escape key for mobile
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -222,13 +260,47 @@ export default function FilterSidebar({
 
       {/* Trending Section */}
       <div className="filter-section">
-        <h3 className="filter-section__title">Trending Topics</h3>
+        <h3 className="filter-section__title">
+          Trending Topics
+          {!isLoadingTopics && trendingTopics.length > 0 && (
+            <span className="filter-section__badge">Live</span>
+          )}
+        </h3>
         <div className="filter-chips">
-          <span className="chip">LLM Agents</span>
-          <span className="chip">Mixture of Experts</span>
-          <span className="chip">RLHF</span>
-          <span className="chip">Diffusion</span>
-          <span className="chip">RAG</span>
+          {isLoadingTopics ? (
+            // Loading skeleton
+            <>
+              <span className="chip chip-skeleton" />
+              <span className="chip chip-skeleton" />
+              <span className="chip chip-skeleton" />
+            </>
+          ) : trendingTopics.length > 0 ? (
+            // Dynamic topics from API
+            trendingTopics.map((topic) => (
+              <button
+                key={topic.id}
+                className="chip chip-clickable"
+                onClick={() => onTopicClick?.(topic.name)}
+                title={`${topic.recent_papers} recent papers • ${topic.growth_percentage > 0 ? '+' : ''}${topic.growth_percentage.toFixed(0)}% growth`}
+              >
+                {topic.name}
+                {topic.growth_percentage > 20 && (
+                  <span className="chip-trend">↑</span>
+                )}
+              </button>
+            ))
+          ) : (
+            // Fallback static topics
+            fallbackTopics.map((topic) => (
+              <button
+                key={topic}
+                className="chip chip-clickable"
+                onClick={() => onTopicClick?.(topic)}
+              >
+                {topic}
+              </button>
+            ))
+          )}
         </div>
       </div>
 

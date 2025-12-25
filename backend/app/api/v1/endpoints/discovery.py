@@ -893,7 +893,8 @@ async def get_rising_papers(
             p.citation_count,
             p.influential_citation_count,
             EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0 as months_since_pub,
-            p.citation_count / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0, 0.1) as velocity
+            p.citation_count / GREATEST(EXTRACT(EPOCH FROM (NOW() - p.published_date)) / 2592000.0, 0.1) as velocity,
+            p.external_signals->'github' as github_data
         FROM papers p
         WHERE {where_clause}
         ORDER BY velocity DESC, p.citation_count DESC
@@ -906,8 +907,9 @@ async def get_rising_papers(
     for row in rows:
         months = float(row["months_since_pub"]) if row["months_since_pub"] else 1.0
         velocity = float(row["velocity"]) if row["velocity"] else 0.0
+        github_data = row["github_data"] if isinstance(row["github_data"], dict) else json.loads(row["github_data"]) if row["github_data"] else None
 
-        papers.append({
+        paper_dict = {
             "id": row["id"],
             "title": row["title"],
             "published": row["published_date"].isoformat() if row["published_date"] else None,
@@ -917,7 +919,25 @@ async def get_rising_papers(
             "months_since_publication": round(months, 1),
             "citation_velocity": round(velocity, 2),
             "link": f"https://arxiv.org/abs/{row['id']}"
-        })
+        }
+
+        # Add GitHub stats if available
+        if github_data and github_data.get("repos"):
+            repos = github_data["repos"]
+            top_repo = repos[0] if repos else None
+            paper_dict["github_stats"] = {
+                "total_stars": github_data.get("total_stars", 0),
+                "repo_count": len(repos),
+                "top_repo": {
+                    "url": top_repo.get("url"),
+                    "stars": top_repo.get("stars", 0),
+                    "forks": top_repo.get("forks", 0),
+                    "language": top_repo.get("language"),
+                    "pushed_at": top_repo.get("pushed_at"),
+                } if top_repo else None
+            }
+
+        papers.append(paper_dict)
 
     # Get velocity distribution stats
     dist_query = f"""

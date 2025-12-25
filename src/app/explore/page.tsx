@@ -291,6 +291,14 @@ export default function ExplorePage() {
         totalPapers={totalPapers}
         isMobileOpen={mobileFiltersOpen}
         onMobileClose={() => setMobileFiltersOpen(false)}
+        onTopicClick={(topicName) => {
+          setSearchQuery(topicName);
+          // Trigger search with the topic
+          const form = document.querySelector('.explore-search') as HTMLFormElement;
+          if (form) {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+        }}
       />
 
       <main className="explore-main">
