@@ -226,8 +226,8 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
                 Foundational
               </span>
             )}
-            {githubStats && githubStats.total_stars >= 100 && (
-              <span className="badge badge-github">
+            {githubStats && githubStats.total_stars > 0 && (
+              <span className="badge badge-github" title={`${githubStats.total_stars.toLocaleString()} GitHub stars`}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z"/>
                 </svg>

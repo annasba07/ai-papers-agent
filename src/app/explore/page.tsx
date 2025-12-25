@@ -72,7 +72,8 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(true);
   const [semanticLoading, setSemanticLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalPapers, setTotalPapers] = useState(0);
+  const [totalPapers, setTotalPapers] = useState(0); // Total papers in database
+  const [filteredCount, setFilteredCount] = useState<number | undefined>(undefined); // Count after filters
   const [searchQuery, setSearchQuery] = useState("");
   const [advisorOpen, setAdvisorOpen] = useState(false);
   const [expandedPaperId, setExpandedPaperId] = useState<string | null>(null);
@@ -131,6 +132,10 @@ export default function ExplorePage() {
     }
 
     try {
+      // Check if any filters are active
+      const hasActiveFilters = searchQuery || filters.hasCode || filters.highImpact ||
+                                filters.category || filters.difficulty || filters.timeRange;
+
       // Build params
       const params = new URLSearchParams({
         limit: String(ITEMS_PER_PAGE),
@@ -177,7 +182,13 @@ export default function ExplorePage() {
           setPapers(data.keywordResults || []);
         }
 
-        setTotalPapers(data.totalKeyword + data.totalSemantic);
+        // When searching, show filtered count
+        const resultCount = data.totalKeyword + data.totalSemantic;
+        setFilteredCount(hasActiveFilters ? resultCount : undefined);
+        if (data.databaseTotal !== undefined) {
+          setTotalPapers(data.databaseTotal);
+        }
+
         setSearchTiming({
           semantic_ms: data.timing.semantic_ms,
           total_ms: data.timing.total_ms,
@@ -212,7 +223,21 @@ export default function ExplorePage() {
           setPapers(paperList);
         }
 
-        setTotalPapers(data.total || paperList.length);
+        // Update counts: if filters active, show filtered vs total
+        const count = data.total || paperList.length;
+        if (hasActiveFilters) {
+          setFilteredCount(count);
+          // Keep totalPapers as is (database total from previous fetch or initial value)
+          if (!totalPapers) {
+            // First load without filters - this is the database total
+            setTotalPapers(count);
+          }
+        } else {
+          // No filters - this is the database total
+          setTotalPapers(count);
+          setFilteredCount(undefined);
+        }
+
         setHasMore(data.has_more !== false && paperList.length === ITEMS_PER_PAGE);
         setOffset(currentOffset + paperList.length);
       }
@@ -289,6 +314,7 @@ export default function ExplorePage() {
         filters={filters}
         onFilterChange={handleFilterChange}
         totalPapers={totalPapers}
+        filteredPapers={filteredCount}
         isMobileOpen={mobileFiltersOpen}
         onMobileClose={() => setMobileFiltersOpen(false)}
         onTopicClick={(topicName) => {

@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       const minReproducibility = searchParams.get('min_reproducibility') || '';
       const minImpactScore = searchParams.get('min_impact_score') || '';
       const difficultyLevel = searchParams.get('difficulty_level') || '';
+      const hasCode = searchParams.get('has_code') || '';
 
       const params = new URLSearchParams({ limit });
       if (offset && parseInt(offset) > 0) params.set('offset', offset);
@@ -59,6 +60,7 @@ export async function GET(request: Request) {
       if (minReproducibility) params.set('min_reproducibility', minReproducibility);
       if (minImpactScore) params.set('min_impact_score', minImpactScore);
       if (difficultyLevel) params.set('difficulty_level', difficultyLevel);
+      if (hasCode === 'true') params.set('has_code', 'true');
 
       const response = await fetch(`${backendBase}/api/v1/atlas-db/papers?${params.toString()}`);
       if (!response.ok) {
@@ -66,17 +68,48 @@ export async function GET(request: Request) {
       }
       const data = await response.json();
 
-      // Transform to match expected frontend format
-      const papers = data.papers.map((p: Record<string, unknown>) => ({
-        id: p.id,
-        title: p.title,
-        abstract: p.abstract,
-        authors: p.authors,
-        published: p.published,
-        category: p.category,
-        link: p.link,
-        concepts: p.concepts || [],
-      }));
+      // Parse JSON string fields from backend
+      const papers = data.papers.map((p: Record<string, unknown>) => {
+        const parsed = { ...p };
+
+        // Parse code_repos if it's a JSON string
+        if (typeof p.code_repos === 'string' && p.code_repos) {
+          try {
+            parsed.code_repos = JSON.parse(p.code_repos);
+          } catch {
+            // If parsing fails, keep as is
+          }
+        }
+
+        // Parse external_signals if it's a JSON string
+        if (typeof p.external_signals === 'string' && p.external_signals) {
+          try {
+            parsed.external_signals = JSON.parse(p.external_signals);
+          } catch {
+            // If parsing fails, keep as is
+          }
+        }
+
+        // Parse deep_analysis if it's a JSON string
+        if (typeof p.deep_analysis === 'string' && p.deep_analysis) {
+          try {
+            parsed.deep_analysis = JSON.parse(p.deep_analysis);
+          } catch {
+            // If parsing fails, keep as is
+          }
+        }
+
+        // Parse ai_analysis if it's a JSON string
+        if (typeof p.ai_analysis === 'string' && p.ai_analysis) {
+          try {
+            parsed.ai_analysis = JSON.parse(p.ai_analysis);
+          } catch {
+            // If parsing fails, keep as is
+          }
+        }
+
+        return parsed;
+      });
 
       return NextResponse.json({
         papers,

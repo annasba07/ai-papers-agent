@@ -16,6 +16,7 @@ interface FilterSidebarProps {
   filters: ExploreFilters;
   onFilterChange: (key: keyof ExploreFilters, value: unknown) => void;
   totalPapers: number;
+  filteredPapers?: number; // Optional: count after filters applied
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
   onTopicClick?: (topicName: string) => void;
@@ -52,6 +53,7 @@ export default function FilterSidebar({
   filters,
   onFilterChange,
   totalPapers,
+  filteredPapers,
   isMobileOpen = false,
   onMobileClose,
   onTopicClick,
@@ -122,7 +124,13 @@ export default function FilterSidebar({
               Filters
             </h2>
             <span className="text-sm text-muted">
-              {totalPapers.toLocaleString()} papers
+              {filteredPapers !== undefined && filteredPapers !== totalPapers ? (
+                <>
+                  <strong>{filteredPapers.toLocaleString()}</strong> of {totalPapers.toLocaleString()} papers
+                </>
+              ) : (
+                <>{totalPapers.toLocaleString()} papers</>
+              )}
             </span>
           </div>
           {onMobileClose && (
@@ -306,14 +314,29 @@ export default function FilterSidebar({
 
         {/* Stats Footer */}
         <div className="sidebar-footer">
-          <div className="sidebar-footer__row">
-            <span className="text-xs text-muted">Papers indexed</span>
-            <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
-          </div>
-          <div className="sidebar-footer__row">
-            <span className="text-xs text-muted">Updated</span>
-            <span className="text-xs font-medium">Just now</span>
-          </div>
+          {filteredPapers !== undefined && filteredPapers !== totalPapers ? (
+            <>
+              <div className="sidebar-footer__row">
+                <span className="text-xs text-muted">Showing</span>
+                <span className="text-xs font-medium">{filteredPapers.toLocaleString()}</span>
+              </div>
+              <div className="sidebar-footer__row">
+                <span className="text-xs text-muted">Total indexed</span>
+                <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="sidebar-footer__row">
+                <span className="text-xs text-muted">Papers indexed</span>
+                <span className="text-xs font-medium">{totalPapers.toLocaleString()}</span>
+              </div>
+              <div className="sidebar-footer__row">
+                <span className="text-xs text-muted">Updated</span>
+                <span className="text-xs font-medium">Just now</span>
+              </div>
+            </>
+          )}
         </div>
       </aside>
     </>
