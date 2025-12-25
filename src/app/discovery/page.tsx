@@ -465,6 +465,43 @@ export default function DiscoveryPage() {
     return diffDays < 90;
   };
 
+  const detectFrameworks = (text?: string, components?: string[]): string[] => {
+    if (!text && (!components || components.length === 0)) return [];
+
+    const frameworks: Set<string> = new Set();
+    const searchText = `${text || ""} ${components?.join(" ") || ""}`.toLowerCase();
+
+    // Framework patterns (case-insensitive)
+    const patterns = [
+      { name: "PyTorch", regex: /\bpytorch\b|\btorch\b(?!\.js)/ },
+      { name: "TensorFlow", regex: /\btensorflow\b|\btf\b/ },
+      { name: "JAX", regex: /\bjax\b|\bflax\b/ },
+      { name: "Keras", regex: /\bkeras\b/ },
+      { name: "Hugging Face", regex: /\bhugging\s*face\b|\btransformers\b(?=\slibrary|\sframework)/ },
+      { name: "scikit-learn", regex: /\bscikit[-\s]learn\b|\bsklearn\b/ },
+      { name: "MXNet", regex: /\bmxnet\b/ },
+      { name: "PaddlePaddle", regex: /\bpaddlepaddle\b|\bpaddle\b/ }
+    ];
+
+    for (const { name, regex } of patterns) {
+      if (regex.test(searchText)) {
+        frameworks.add(name);
+      }
+    }
+
+    return Array.from(frameworks);
+  };
+
+  const renderFrameworkBadges = (frameworks: string[]) => {
+    if (frameworks.length === 0) return null;
+
+    return frameworks.slice(0, 3).map((framework) => (
+      <span key={framework} className="discovery-framework-badge" title={`Uses ${framework}`}>
+        {framework}
+      </span>
+    ));
+  };
+
   const renderGitHubIndicator = (github_stats?: GitHubStats) => {
     if (!github_stats || github_stats.total_stars === 0) return null;
     const topRepo = github_stats.top_repo;
@@ -959,14 +996,20 @@ export default function DiscoveryPage() {
                   <span>Loading techniques...</span>
                 </div>
               ) : (
-                techniquePapers.map((paper) => (
-                  <article key={paper.id} className="discovery-technique-card">
-                    <div className="discovery-technique-card__header">
-                      {paper.novelty_type && (
-                        <span className="discovery-badge discovery-badge--technique">{paper.novelty_type}</span>
-                      )}
-                      {renderGitHubIndicator(paper.github_stats)}
-                    </div>
+                techniquePapers.map((paper) => {
+                  const frameworks = detectFrameworks(
+                    paper.methodology_approach,
+                    paper.key_components
+                  );
+                  return (
+                    <article key={paper.id} className="discovery-technique-card">
+                      <div className="discovery-technique-card__header">
+                        {paper.novelty_type && (
+                          <span className="discovery-badge discovery-badge--technique">{paper.novelty_type}</span>
+                        )}
+                        {renderFrameworkBadges(frameworks)}
+                        {renderGitHubIndicator(paper.github_stats)}
+                      </div>
                     <h3 className="discovery-technique-card__title">
                       <a href={`https://arxiv.org/abs/${paper.id}`} target="_blank" rel="noopener noreferrer">
                         {paper.title}
@@ -988,7 +1031,8 @@ export default function DiscoveryPage() {
                       </div>
                     )}
                   </article>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
