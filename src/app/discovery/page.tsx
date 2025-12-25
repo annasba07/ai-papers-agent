@@ -16,6 +16,7 @@ interface GitHubStats {
     forks: number;
     language?: string;
     pushed_at?: string;
+    license?: string;
   };
 }
 
@@ -468,6 +469,7 @@ export default function DiscoveryPage() {
     if (!github_stats || github_stats.total_stars === 0) return null;
     const topRepo = github_stats.top_repo;
     const isActive = topRepo?.pushed_at && isRecentlyUpdated(topRepo.pushed_at);
+    const license = topRepo?.license;
 
     return (
       <a
@@ -475,7 +477,7 @@ export default function DiscoveryPage() {
         target="_blank"
         rel="noopener noreferrer"
         className={`discovery-github-indicator ${isActive ? "discovery-github-indicator--active" : ""}`}
-        title={`${github_stats.total_stars} stars${topRepo?.language ? ` • ${topRepo.language}` : ""}${topRepo?.pushed_at ? ` • Updated ${formatRelativeTime(topRepo.pushed_at)}` : ""}`}
+        title={`${github_stats.total_stars} stars${topRepo?.language ? ` • ${topRepo.language}` : ""}${license ? ` • ${license} license` : ""}${topRepo?.pushed_at ? ` • Updated ${formatRelativeTime(topRepo.pushed_at)}` : ""}`}
         onClick={(e) => e.stopPropagation()}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -483,6 +485,7 @@ export default function DiscoveryPage() {
         </svg>
         <span className="discovery-github-indicator__stars">{formatStars(github_stats.total_stars)}</span>
         {isActive && <span className="discovery-github-indicator__active" title="Recently updated" />}
+        {license && <span className="discovery-license-badge" title={`${license} license`}>{license}</span>}
       </a>
     );
   };
