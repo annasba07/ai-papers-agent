@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     const [semanticResponse, keywordResponse] = await Promise.allSettled([
       // Semantic search (only if query exists)
       semanticPayload
-        ? fetch(`${backendBase}/papers/contextual-search`, {
+        ? fetch(`${backendBase}/api/v1/papers/contextual-search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(semanticPayload),
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
         : Promise.resolve(null),
 
       // Keyword search
-      fetch(`${backendBase}/atlas-db/papers?${keywordParams.toString()}`, {
+      fetch(`${backendBase}/api/v1/atlas-db/papers?${keywordParams.toString()}`, {
         signal: AbortSignal.timeout(8000), // 8s timeout
       }),
     ]);

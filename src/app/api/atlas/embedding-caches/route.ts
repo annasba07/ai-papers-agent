@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   try {
-    const response = await fetch(`${backendBase}/papers/embedding-caches`);
+    const response = await fetch(`${backendBase}/api/v1/papers/embedding-caches`);
     const payload = await response.json();
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {

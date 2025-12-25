@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       if (minImpactScore) params.set('min_impact_score', minImpactScore);
       if (difficultyLevel) params.set('difficulty_level', difficultyLevel);
 
-      const response = await fetch(`${backendBase}/atlas-db/papers?${params.toString()}`);
+      const response = await fetch(`${backendBase}/api/v1/atlas-db/papers?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

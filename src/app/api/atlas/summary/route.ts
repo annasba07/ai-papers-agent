@@ -13,7 +13,7 @@ export async function GET() {
   if (backendBase) {
     try {
       // Try the new database-backed endpoint first
-      const response = await fetch(`${backendBase}/atlas-db/summary`);
+      const response = await fetch(`${backendBase}/api/v1/atlas-db/summary`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
