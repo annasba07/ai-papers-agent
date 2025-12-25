@@ -65,6 +65,7 @@ export interface ExplorePaper {
 export interface ExploreFilters {
   hasCode: boolean;
   highImpact: boolean;
+  seminalPapers: boolean; // Highly cited foundational papers
   difficulty: "beginner" | "intermediate" | "advanced" | "expert" | null;
   category: string | null;
   sortBy: "recent" | "citations" | "impact";

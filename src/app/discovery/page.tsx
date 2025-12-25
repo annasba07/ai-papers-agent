@@ -239,7 +239,7 @@ export default function DiscoveryPage() {
   const [reproduciblePapers, setReproduciblePapers] = useState<ReproduciblePaper[]>([]);
   const [hotTopics, setHotTopics] = useState<HotTopic[]>([]);
   const [learningPath, setLearningPath] = useState<LearningPathData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start as false to show empty state
   const [error, setError] = useState<string | null>(null);
   const [noveltyFilter, setNoveltyFilter] = useState<string | null>(null);
   const [noveltyDistribution, setNoveltyDistribution] = useState<Record<string, number>>({});
@@ -249,7 +249,7 @@ export default function DiscoveryPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(API_BASE ? `${API_BASE}/discovery/stats` : "/api/discovery/stats");
+      const response = await fetch(API_BASE ? `${API_BASE}/api/v1/discovery/stats` : "/api/discovery/stats");
       if (!response.ok) throw new Error("Failed to fetch stats");
       const data = await response.json();
       setStats(data);
@@ -263,7 +263,7 @@ export default function DiscoveryPage() {
     try {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/impact?min_score=7&limit=20${categoryParam}` : `/api/discovery/impact?min_score=7&limit=20${categoryParam}`
+        API_BASE ? `${API_BASE}/api/v1/discovery/impact?min_score=7&limit=20${categoryParam}` : `/api/discovery/impact?min_score=7&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch impact papers");
       const data = await response.json();
@@ -280,7 +280,7 @@ export default function DiscoveryPage() {
     try {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/tldr?days=7&limit=20${categoryParam}` : `/api/discovery/tldr?days=7&limit=20${categoryParam}`
+        API_BASE ? `${API_BASE}/api/v1/discovery/tldr?days=7&limit=20${categoryParam}` : `/api/discovery/tldr?days=7&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch TL;DR papers");
       const data = await response.json();
@@ -297,7 +297,7 @@ export default function DiscoveryPage() {
     try {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/rising?min_citations=5&limit=20${categoryParam}` : `/api/discovery/rising?min_citations=5&limit=20${categoryParam}`
+        API_BASE ? `${API_BASE}/api/v1/discovery/rising?min_citations=5&limit=20${categoryParam}` : `/api/discovery/rising?min_citations=5&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch rising papers");
       const data = await response.json();
@@ -314,8 +314,8 @@ export default function DiscoveryPage() {
     try {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const noveltyParam = noveltyFilter ? `&novelty_type=${noveltyFilter}` : "";
-      const url = `${API_BASE}/discovery/techniques?limit=20${noveltyParam}${categoryParam}`;
-      const response = await fetch(API_BASE ? url : url.replace(API_BASE, "/api"));
+      const url = API_BASE ? `${API_BASE}/api/v1/discovery/techniques?limit=20${noveltyParam}${categoryParam}` : `/api/discovery/techniques?limit=20${noveltyParam}${categoryParam}`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch technique papers");
       const data = await response.json();
       setTechniquePapers(data.papers || []);
@@ -333,7 +333,7 @@ export default function DiscoveryPage() {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
         API_BASE
-          ? `${API_BASE}/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
+          ? `${API_BASE}/api/v1/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
           : `/api/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
       );
       if (!response.ok) throw new Error("Failed to fetch reproducible papers");
@@ -350,7 +350,7 @@ export default function DiscoveryPage() {
     setLoading(true);
     try {
       const response = await fetch(
-        API_BASE ? `${API_BASE}/discovery/hot-topics?days=30&limit=15` : "/api/discovery/hot-topics?days=30&limit=15"
+        API_BASE ? `${API_BASE}/api/v1/discovery/hot-topics?days=30&limit=15` : "/api/discovery/hot-topics?days=30&limit=15"
       );
       if (!response.ok) throw new Error("Failed to fetch hot topics");
       const data = await response.json();

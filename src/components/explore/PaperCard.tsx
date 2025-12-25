@@ -216,7 +216,18 @@ export default function PaperCard({ paper, isExpanded, onToggleExpand, variant =
             {impactScore && impactScore >= 7 && (
               <span className="badge badge-highlight">High Impact</span>
             )}
-            {paper.citation_count >= 100 && (
+            {/* Industry best practice: Two-tier citation badge system for newcomers */}
+            {/* Seminal papers (500+ citations) - Must-read foundational work */}
+            {paper.citation_count >= 500 && (
+              <span className="badge badge-seminal" title={`${paper.citation_count.toLocaleString()} citations - Top 1% highly cited`}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Seminal
+              </span>
+            )}
+            {/* Foundational papers (100-499 citations) - Important contextual work */}
+            {paper.citation_count >= 100 && paper.citation_count < 500 && (
               <span className="badge badge-foundational" title={`${paper.citation_count.toLocaleString()} citations`}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 2L2 7l10 5 10-5-10-5z" />

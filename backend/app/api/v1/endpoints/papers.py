@@ -492,18 +492,81 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
                 return text[:limit].rstrip() + "…"
             return text
 
+        # Detect temporal intent (foundational/seminal papers)
+        # Industry best practice: Comprehensive keyword matching for diverse user intents
+        # Covers: explicit requests, historical context, learning paths, chronological queries
+        temporal_keywords = [
+            # Explicit foundational requests
+            "foundational", "seminal", "classic", "pioneering", "early work",
+            "origins", "original", "first", "landmark", "influential", "breakthrough",
+            # Historical/temporal context (Sarah's query pattern: "how VLMs evolved")
+            "evolution", "evolved", "history", "timeline", "progression", "development",
+            "background", "context", "came before", "preceded",
+            # Learning path queries (newcomer/PhD student patterns)
+            "learn", "learning", "basics", "fundamentals", "introduction",
+            "start", "begin", "prerequisite", "foundation", "must-read",
+            # Chronological queries
+            "chronological", "historical", "over time", "through time",
+        ]
+        is_foundational_query = any(
+            keyword in user_description.lower() for keyword in temporal_keywords
+        )
+
+        # Adjust search parameters for foundational queries
+        search_max_days = None if is_foundational_query else max_days
+        search_top_k = top_k * 3 if is_foundational_query else top_k  # Get more candidates for citation filtering
+
         # Step 1: Retrieve candidates from the local atlas (semantic search + recency weighting)
         t_retrieval_start = time.perf_counter()
         try:
             papers = local_atlas_service.search(
                 user_description,
-                top_k=top_k,
-                max_age_days=max_days,
+                top_k=search_top_k,
+                max_age_days=search_max_days,
                 embedding_label=embedding_label,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         timing["retrieval_ms"] = (time.perf_counter() - t_retrieval_start) * 1000
+
+        # Post-process for foundational queries: boost by citation count and age
+        if is_foundational_query and papers:
+            from datetime import datetime
+
+            def get_foundational_score(paper: Dict) -> float:
+                """Calculate foundational score: older + highly cited = better"""
+                base_score = paper.get("score", 0.0)
+                citation_count = paper.get("citation_count", 0) or 0
+
+                # Parse publication date
+                published_str = paper.get("published", "")
+                try:
+                    if published_str:
+                        published_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+                        # Age in years (older is better for foundational)
+                        age_years = (datetime.now(published_dt.tzinfo) - published_dt).days / 365.25
+                        # Boost papers from 2-10 years old (avoid too recent, but not ancient)
+                        age_boost = min(age_years / 5.0, 1.5) if age_years >= 2 else 0.0
+                    else:
+                        age_boost = 0.0
+                except:
+                    age_boost = 0.0
+
+                # Citation boost (log scale to avoid overwhelming)
+                # Industry best practice: Double the weight for highly-cited papers
+                # Rationale: Seminal papers (CLIP, VisualBERT) have 1000+ citations
+                # Higher weight ensures they surface in foundational queries
+                import math
+                citation_boost = math.log1p(citation_count) / 5.0  # Increased from /10.0
+
+                # Combine: 40% original score, 35% citation, 25% age
+                # Shifted 10% from base_score to citation_boost for foundational queries
+                return (base_score * 0.4) + (citation_boost * 0.35) + (age_boost * 0.25)
+
+            # Re-rank by foundational score
+            papers.sort(key=get_foundational_score, reverse=True)
+            # Trim back to top_k
+            papers = papers[:top_k]
 
         used_fallback = False
 

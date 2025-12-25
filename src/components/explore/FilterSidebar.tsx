@@ -125,9 +125,9 @@ export default function FilterSidebar({
             </h2>
             <span className="text-sm text-muted">
               {filteredPapers !== undefined && filteredPapers !== totalPapers ? (
-                <>
-                  <strong>{filteredPapers.toLocaleString()}</strong> of {totalPapers.toLocaleString()} papers
-                </>
+                <span style={{ color: '#ff6b35', fontWeight: 600 }}>
+                  Showing {filteredPapers.toLocaleString()} of {totalPapers.toLocaleString()} papers
+                </span>
               ) : (
                 <>{totalPapers.toLocaleString()} papers</>
               )}
@@ -177,6 +177,24 @@ export default function FilterSidebar({
               )}
             </span>
             <span>High Impact (7+)</span>
+          </button>
+
+          <button
+            className={`filter-item ${filters.seminalPapers ? "filter-item--active" : ""}`}
+            onClick={() => onFilterChange("seminalPapers", !filters.seminalPapers)}
+            title="Top 1% most cited papers - foundational and influential works"
+          >
+            <span className="filter-item__checkbox">
+              {filters.seminalPapers && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </span>
+            <span>Seminal Papers</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: '4px', opacity: 0.6 }}>
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
           </button>
         </div>
       </div>
@@ -318,7 +336,7 @@ export default function FilterSidebar({
             <>
               <div className="sidebar-footer__row">
                 <span className="text-xs text-muted">Showing</span>
-                <span className="text-xs font-medium">{filteredPapers.toLocaleString()}</span>
+                <span className="text-xs font-medium" style={{ color: '#ff6b35' }}>{filteredPapers.toLocaleString()}</span>
               </div>
               <div className="sidebar-footer__row">
                 <span className="text-xs text-muted">Total indexed</span>

@@ -185,6 +185,57 @@ export async function GET(request: NextRequest) {
         keywordError,
         timing,
       });
+
+      // Industry best practice: Auto-retry with simplified query to improve recall
+      // Rationale: Multi-word queries often fail due to overly specific phrase matching
+      // Solution: Retry with first 2-3 keywords only (e.g., "efficient attention mechanisms mobile" → "efficient attention")
+      if (query) {
+        const words = query.split(/\s+/).filter(w => w.length >= 3);
+
+        // Only retry if:
+        // 1. Original query had 3+ words (already simple queries likely won't benefit)
+        // 2. We haven't already retried (prevent infinite loops)
+        if (words.length >= 3) {
+          const simplifiedQuery = words.slice(0, 2).join(' ');
+          console.log(`[Hybrid Search] Retrying with simplified query: "${simplifiedQuery}"`);
+
+          try {
+            // Retry keyword search only (faster than semantic, ~100-500ms)
+            const retryParams = new URLSearchParams({
+              query: simplifiedQuery,
+              limit: String(limit * 2), // Fetch more to compensate for lower precision
+              order_by: 'published_date',
+              order_dir: 'desc',
+            });
+
+            // Add existing filters to retry
+            if (category) retryParams.set('category', category);
+            if (hasDeepAnalysis) retryParams.set('has_deep_analysis', hasDeepAnalysis);
+            if (minImpactScore) retryParams.set('min_impact_score', minImpactScore);
+            if (minReproducibility) retryParams.set('min_reproducibility', minReproducibility);
+            if (difficultyLevel) retryParams.set('difficulty_level', difficultyLevel);
+
+            const retryResponse = await fetch(
+              `${backendBase}/api/v1/atlas-db/papers?${retryParams.toString()}`,
+              { signal: AbortSignal.timeout(5000) } // 5s timeout for retry
+            );
+
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              keywordPapers = (retryData.papers || []).map((p: KeywordPaper) => ({
+                ...p,
+                _source: 'keyword_retry' as const,
+                _retried: true, // Mark as from retry for transparency
+              }));
+              totalKeyword = retryData.total || keywordPapers.length;
+              console.log(`[Hybrid Search] Retry successful: ${keywordPapers.length} results`);
+            }
+          } catch (retryError) {
+            console.warn('[Hybrid Search] Retry failed:', retryError);
+            // Continue with empty results - don't fail the whole request
+          }
+        }
+      }
     }
 
     // Deduplicate: semantic results take priority

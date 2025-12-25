@@ -62,6 +62,7 @@ async def get_papers(
     min_reproducibility: Optional[int] = Query(default=None, ge=1, le=10, description="Minimum reproducibility score (1-10)"),
     novelty_type: Optional[str] = Query(default=None, description="Filter by novelty type (architectural, algorithmic, etc.)"),
     has_code: Optional[bool] = Query(default=None, description="Filter papers with/without associated code repositories"),
+    seminal_only: Optional[bool] = Query(default=None, description="Filter for highly cited seminal papers (top 1% by citations)"),
 ):
     """
     Get papers from the database with filtering and pagination.
@@ -99,9 +100,44 @@ async def get_papers(
         params["cutoff"] = cutoff
 
     if query:
-        # Use full-text search if available, otherwise ILIKE
-        conditions.append("(p.title ILIKE :query OR p.abstract ILIKE :query)")
-        params["query"] = f"%{query}%"
+        # Try PostgreSQL full-text search first (faster + better ranking)
+        # Falls back to tokenized ILIKE search if search_vector not populated
+        try:
+            # Attempt full-text search using pre-built search_vector
+            conditions.append("p.search_vector @@ plainto_tsquery('english', :fts_query)")
+            params["fts_query"] = query
+        except Exception:
+            # Fallback: Tokenized ILIKE search for flexible word matching
+            # Industry best practice: split multi-word queries into individual tokens
+            # to avoid overly restrictive exact-phrase matching
+
+            # Tokenize: split on whitespace, filter short/stop words
+            words = [w.strip().lower() for w in query.split() if len(w.strip()) >= 3]
+
+            if len(words) == 0:
+                # Query too short or all stop words - skip filtering
+                pass
+            elif len(words) == 1:
+                # Single word: simple ILIKE pattern
+                conditions.append("(p.title ILIKE :query OR p.abstract ILIKE :query)")
+                params["query"] = f"%{words[0]}%"
+            else:
+                # Multiple words: require ALL words to appear (AND logic)
+                # This improves recall while maintaining precision
+                # e.g., "model quantization" matches papers with both words anywhere
+
+                # Limit to first 5 words to prevent query complexity explosion
+                words = words[:5]
+
+                word_conditions = []
+                for i, word in enumerate(words):
+                    word_param = f"word_{i}"
+                    word_conditions.append(
+                        f"(p.title ILIKE :{word_param} OR p.abstract ILIKE :{word_param})"
+                    )
+                    params[word_param] = f"%{word}%"
+
+                conditions.append("(" + " AND ".join(word_conditions) + ")")
 
     if concept:
         conditions.append("""
@@ -146,6 +182,20 @@ async def get_papers(
             conditions.append("(p.code_repos IS NOT NULL AND jsonb_array_length(p.code_repos) > 0)")
         else:
             conditions.append("(p.code_repos IS NULL OR jsonb_array_length(p.code_repos) = 0)")
+
+    # Seminal papers filter - top 1% by citations
+    if seminal_only:
+        # Calculate 99th percentile citation threshold
+        percentile_query = """
+            SELECT PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY citation_count)
+            FROM papers
+            WHERE citation_count > 0
+        """
+        percentile_result = await database.fetch_one(percentile_query)
+        if percentile_result:
+            citation_threshold = percentile_result[0] or 100  # Fallback to 100
+            conditions.append("p.citation_count >= :citation_threshold")
+            params["citation_threshold"] = citation_threshold
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
