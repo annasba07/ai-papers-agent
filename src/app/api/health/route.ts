@@ -38,11 +38,12 @@ export async function GET() {
     };
   }
 
-  // Check Next.js API route
+  // Check Next.js API route (local route, not backend)
   try {
     const apiStart = Date.now();
+    // Use localhost:3000 to test Next.js API proxy route
     const response = await fetch(
-      `${API_BASE}/atlas-db/papers?limit=1`,
+      'http://localhost:3000/api/atlas/papers?limit=1',
       {
         cache: 'no-store',
         signal: AbortSignal.timeout(5000),
