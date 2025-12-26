@@ -27,6 +27,26 @@ from app.core.config import settings
 router = APIRouter()
 
 
+def detect_paper_type(title: str) -> str:
+    """
+    Detect paper type based on title keywords.
+    Returns: 'survey', 'tutorial', 'review', 'primer', or 'research'
+    """
+    title_lower = title.lower()
+
+    # Order matters: check most specific first
+    if 'tutorial' in title_lower:
+        return 'tutorial'
+    elif 'survey' in title_lower:
+        return 'survey'
+    elif 'review' in title_lower:
+        return 'review'
+    elif any(keyword in title_lower for keyword in ['primer', 'introduction to', 'guide to']):
+        return 'primer'
+    else:
+        return 'research'
+
+
 async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
     """
     Fetch a paper from the Supabase atlas database.
@@ -76,6 +96,9 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
 
         plain_id = row["id"].split("v")[0]
 
+        # Detect paper type from title
+        paper_type = detect_paper_type(row["title"])
+
         return {
             "id": row["id"],
             "title": row["title"],
@@ -88,7 +111,8 @@ async def get_paper_from_atlas_db(paper_id: str) -> Optional[Dict[str, Any]]:
             "citation_count": row["citation_count"] or 0,
             "concepts": row["concepts"] or [],
             "aiSummary": ai_analysis,  # Tier 1: Abstract-based analysis
-            "deepAnalysis": deep_analysis  # Tier 2: PDF-based analysis
+            "deepAnalysis": deep_analysis,  # Tier 2: PDF-based analysis
+            "paper_type": paper_type
         }
     except Exception as e:
         # Log error but don't fail - caller will fall back to arXiv
