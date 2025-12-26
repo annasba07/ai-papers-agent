@@ -668,23 +668,38 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
         papers_text = "\n".join(papers_formatted)
 
         # Step 3: Generate synthesis and recommendations
-        synthesis_prompt = f"""You are an expert AI research assistant. A user has described a project they are working on.
-        Based on their goal and a list of relevant research papers, your task is to synthesize the information and provide actionable advice.
+        # Detect query intent for tailored synthesis
+        query_lower = user_description.lower()
+        is_learning_query = any(kw in query_lower for kw in [
+            "learn", "understand", "basics", "fundamentals", "introduction",
+            "beginner", "start", "getting started", "new to", "primer"
+        ])
+        is_foundational_request = is_foundational_query  # Already detected above
 
-        User's Project Goal: "{user_description}"
+        # Build domain-aware, relevance-filtered synthesis prompt
+        synthesis_prompt = f"""You are an expert AI research assistant helping researchers discover relevant papers.
 
-        Relevant Research Papers:
-        {papers_text}
+User's Query: "{user_description}"
 
-        Please provide a concise analysis that includes:
+Candidate Papers (may include some irrelevant results):
+{papers_text}
 
-        1. **State-of-the-Art Techniques:** Briefly describe 2-3 of the most cutting-edge techniques from these papers that are directly applicable to the user's project.
+CRITICAL INSTRUCTIONS:
+1. **Relevance Filtering**: First, identify which papers are directly relevant to the user's query. IGNORE papers from unrelated domains (e.g., don't recommend neuroscience papers for computer vision queries). Only discuss papers that match the query's domain and intent.
 
-        2. **How to Apply Them:** For each technique, explain how the user could specifically implement or adapt it for their application.
+2. **Query Intent**: This appears to be a {"LEARNING/FOUNDATIONAL" if is_learning_query or is_foundational_request else "IMPLEMENTATION/RESEARCH"} query.
+   {"- Prioritize foundational, highly-cited, and tutorial/survey papers" if is_learning_query or is_foundational_request else "- Focus on recent methods, benchmarks, and state-of-the-art techniques"}
+   {"- Use accessible language suitable for someone learning the field" if is_learning_query else "- Assume technical expertise and focus on novel contributions"}
 
-        3. **Potential Challenges:** Mention any potential challenges or limitations the user should be aware of when using these advanced methods.
+3. **Response Structure**:
+   - Start by identifying the 2-3 MOST RELEVANT papers (ignore off-topic ones)
+   - Explain why they're applicable to the user's specific query
+   - Provide actionable next steps based on the user's intent
+   {"- Suggest a learning path if this is an introductory query" if is_learning_query else "- Highlight implementation details and benchmarks"}
 
-        **Analysis Report:**"""
+Be concise (3-4 paragraphs max). If NONE of the papers are truly relevant, say so honestly.
+
+**Analysis Report:**"""
 
         # Step 3: AI synthesis
         t_synthesis_start = time.perf_counter()
