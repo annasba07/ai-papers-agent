@@ -26,6 +26,8 @@ interface KeywordPaper {
   concepts?: string[];
   deep_analysis?: Record<string, unknown>;
   external_signals?: Record<string, unknown>;
+  paper_type?: string;
+  code_repos?: string[];
 }
 
 interface HybridSearchResult {
