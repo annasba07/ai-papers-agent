@@ -99,6 +99,9 @@ async def get_papers(
         conditions.append("p.published_date >= :cutoff")
         params["cutoff"] = cutoff
 
+    # Track if we're using full-text search for relevance ranking
+    using_fts = False
+
     if query:
         # Try PostgreSQL full-text search first (faster + better ranking)
         # Falls back to tokenized ILIKE search if search_vector not populated
@@ -106,6 +109,7 @@ async def get_papers(
             # Attempt full-text search using pre-built search_vector
             conditions.append("p.search_vector @@ plainto_tsquery('english', :fts_query)")
             params["fts_query"] = query
+            using_fts = True
         except Exception:
             # Fallback: Tokenized ILIKE search for flexible word matching
             # Industry best practice: split multi-word queries into individual tokens
@@ -199,10 +203,17 @@ async def get_papers(
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
-    # Validate and set order
-    valid_order_fields = {"published_date": "p.published_date", "citation_count": "p.citation_count", "title": "p.title"}
-    order_field = valid_order_fields.get(order_by, "p.published_date")
-    order_direction = "DESC" if order_dir == "desc" else "ASC"
+    # Validate and set order - use relevance ranking for full-text search
+    if using_fts and not order_by:
+        # When using FTS without explicit ordering, rank by relevance (ts_rank)
+        # Secondary sort by recency to break ties
+        order_clause = "ts_rank(p.search_vector, plainto_tsquery('english', :fts_query)) DESC, p.published_date DESC"
+    else:
+        # Use explicit ordering or default to recency
+        valid_order_fields = {"published_date": "p.published_date", "citation_count": "p.citation_count", "title": "p.title"}
+        order_field = valid_order_fields.get(order_by, "p.published_date")
+        order_direction = "DESC" if order_dir == "desc" else "ASC"
+        order_clause = f"{order_field} {order_direction}"
 
     # Count total matching papers
     count_query = f"SELECT COUNT(*) as total FROM papers p WHERE {where_clause}"
@@ -231,7 +242,7 @@ async def get_papers(
             ) as concepts
         FROM papers p
         WHERE {where_clause}
-        ORDER BY {order_field} {order_direction}
+        ORDER BY {order_clause}
         LIMIT :limit OFFSET :offset
     """
 
