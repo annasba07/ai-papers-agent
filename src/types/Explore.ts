@@ -33,6 +33,7 @@ export interface ExplorePaper {
   link: string;
   citation_count: number;
   concepts?: string[];
+  paper_type?: "survey" | "tutorial" | "review" | "primer" | "research";
   // Deep analysis fields
   ai_analysis?: {
     impactScore?: number;
