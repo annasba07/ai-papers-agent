@@ -65,7 +65,7 @@ echo ""
 # Health check verification
 echo -e "${BLUE}Running health checks...${NC}"
 health_response=$(curl -s http://localhost:3000/api/health || echo '{"status":"unhealthy"}')
-health_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+health_status=$(echo "$health_response" | jq -r '.status')
 
 if [ "$health_status" != "healthy" ]; then
     echo -e "${RED}ERROR: System health check failed${NC}"
