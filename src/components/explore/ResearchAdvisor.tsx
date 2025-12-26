@@ -104,25 +104,48 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to get response");
+      // Try to parse response even if not OK - might contain papers
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error("Failed to parse response");
       }
 
-      const data = await response.json();
-
+      // Extract papers regardless of response status
       const papers = data.papers?.slice(0, 5).map((p: { id: string; title: string; summary?: string }) => ({
         id: p.id,
         title: p.title,
         summary: p.summary || "",
       })) || [];
 
+      // If response not OK but we have papers, continue with degraded mode
+      if (!response.ok && papers.length === 0) {
+        throw new Error("Failed to get response");
+      }
+
       const paperTitles = papers.map((p: { title: string }) => p.title);
       const followUpSuggestions = generateFollowUpSuggestions(userMessage.content, paperTitles);
+
+      // Handle synthesis unavailable gracefully
+      let content = data.analysis || "";
+      const synthesisUnavailable = content.toLowerCase().includes('synthesis') &&
+                                   content.toLowerCase().includes('unavailable');
+
+      if (synthesisUnavailable && papers.length > 0) {
+        content = "I found some relevant papers for your query. While I couldn't generate a detailed analysis right now, these papers should help you get started. Feel free to ask me to explain any of them!";
+      } else if ((!response.ok || !content) && papers.length > 0) {
+        content = "I found some relevant papers for you. The detailed analysis is temporarily unavailable, but you can explore these papers below.";
+      } else if (!content && papers.length > 0) {
+        content = "I found some relevant papers for you.";
+      } else if (!content) {
+        content = "I'm here to help you discover research papers. Try asking me about a topic you're interested in!";
+      }
 
       const assistantMessage: AdvisorMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        content: data.analysis || "I found some relevant papers for you.",
+        content,
         papers,
         suggestions: followUpSuggestions,
         timestamp: new Date(),
