@@ -6,6 +6,9 @@ const rawBase =
   '';
 const backendBase = rawBase.replace(/\/$/, '');
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   if (!backendBase) {
     return NextResponse.json(

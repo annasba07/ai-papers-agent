@@ -7,6 +7,8 @@ const rawBase =
 const backendBase = rawBase.replace(/\/$/, '');
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface SemanticPaper {
   id: string;

@@ -11,6 +11,9 @@ const rawBase =
   '';
 const backendBase = rawBase.replace(/\/$/, '');
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function matchesQuery(paper: AtlasPaper, query: string) {
   const lower = query.toLowerCase();
   return (
