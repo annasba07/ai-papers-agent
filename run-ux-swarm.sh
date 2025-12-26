@@ -62,6 +62,34 @@ fi
 echo -e "${GREEN}Dev server is running.${NC}"
 echo ""
 
+# Health check verification
+echo -e "${BLUE}Running health checks...${NC}"
+health_response=$(curl -s http://localhost:3000/api/health || echo '{"status":"unhealthy"}')
+health_status=$(echo "$health_response" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+
+if [ "$health_status" != "healthy" ]; then
+    echo -e "${RED}ERROR: System health check failed${NC}"
+    echo -e "${YELLOW}Response: $health_response${NC}"
+    echo ""
+    echo -e "${YELLOW}Possible issues:${NC}"
+    echo -e "  - Backend server not running (port 8000)"
+    echo -e "  - Database connection issues"
+    echo -e "  - API routes not properly compiled"
+    echo ""
+    echo -e "${YELLOW}Please fix system health before running UX swarm.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}System health check passed.${NC}"
+echo ""
+
+# Pre-warm API routes to ensure compilation
+echo -e "${BLUE}Pre-warming API routes...${NC}"
+curl -s http://localhost:3000/api/atlas/papers?limit=1 > /dev/null 2>&1 || true
+curl -s http://localhost:3000/api/discovery/stats > /dev/null 2>&1 || true
+sleep 2
+echo -e "${GREEN}API routes warmed up.${NC}"
+echo ""
+
 # Array to hold PIDs
 declare -a PIDS=()
 
