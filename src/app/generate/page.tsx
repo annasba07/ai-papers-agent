@@ -57,7 +57,7 @@ export default function GeneratePage() {
         ? `${apiBaseUrl}/atlas-db/papers?query=${encodeURIComponent(searchQuery)}&limit=10`
         : `/api/atlas/papers?query=${encodeURIComponent(searchQuery)}&limit=10`;
 
-      const response = await fetch(endpoint);
+      const response = await fetch(endpoint, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to search papers");
 
       const data = await response.json();
@@ -86,6 +86,7 @@ export default function GeneratePage() {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: 'no-store',
       });
 
       if (!response.ok) {

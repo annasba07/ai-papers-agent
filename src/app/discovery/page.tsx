@@ -249,7 +249,7 @@ export default function DiscoveryPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(API_BASE ? `${API_BASE}/api/v1/discovery/stats` : "/api/discovery/stats");
+      const response = await fetch(API_BASE ? `${API_BASE}/api/v1/discovery/stats` : "/api/discovery/stats", { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch stats");
       const data = await response.json();
       setStats(data);
@@ -264,7 +264,7 @@ export default function DiscoveryPage() {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
         API_BASE ? `${API_BASE}/api/v1/discovery/impact?min_score=7&limit=20${categoryParam}` : `/api/discovery/impact?min_score=7&limit=20${categoryParam}`
-      );
+      , { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch impact papers");
       const data = await response.json();
       setImpactPapers(data.papers || []);
@@ -281,7 +281,7 @@ export default function DiscoveryPage() {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
         API_BASE ? `${API_BASE}/api/v1/discovery/tldr?days=7&limit=20${categoryParam}` : `/api/discovery/tldr?days=7&limit=20${categoryParam}`
-      );
+      , { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch TL;DR papers");
       const data = await response.json();
       setTldrPapers(data.papers || []);
@@ -298,7 +298,7 @@ export default function DiscoveryPage() {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const response = await fetch(
         API_BASE ? `${API_BASE}/api/v1/discovery/rising?min_citations=5&limit=20${categoryParam}` : `/api/discovery/rising?min_citations=5&limit=20${categoryParam}`
-      );
+      , { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch rising papers");
       const data = await response.json();
       setRisingPapers(data.papers || []);
@@ -315,7 +315,7 @@ export default function DiscoveryPage() {
       const categoryParam = categoryFilter ? `&category=${categoryFilter}` : "";
       const noveltyParam = noveltyFilter ? `&novelty_type=${noveltyFilter}` : "";
       const url = API_BASE ? `${API_BASE}/api/v1/discovery/techniques?limit=20${noveltyParam}${categoryParam}` : `/api/discovery/techniques?limit=20${noveltyParam}${categoryParam}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch technique papers");
       const data = await response.json();
       setTechniquePapers(data.papers || []);
@@ -335,7 +335,7 @@ export default function DiscoveryPage() {
         API_BASE
           ? `${API_BASE}/api/v1/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
           : `/api/discovery/reproducible?min_reproducibility=7&has_code=true&limit=20${categoryParam}`
-      );
+      , { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch reproducible papers");
       const data = await response.json();
       setReproduciblePapers(data.papers || []);
@@ -351,7 +351,7 @@ export default function DiscoveryPage() {
     try {
       const response = await fetch(
         API_BASE ? `${API_BASE}/api/v1/discovery/hot-topics?days=30&limit=15` : "/api/discovery/hot-topics?days=30&limit=15"
-      );
+      , { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch hot topics");
       const data = await response.json();
       setHotTopics(data.topics || []);
@@ -372,7 +372,7 @@ export default function DiscoveryPage() {
       const url = API_BASE
         ? `${API_BASE}/api/v1/discovery/learning-path?${params.toString()}`
         : `/api/discovery/learning-path?${params.toString()}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: 'no-store' });
       if (!response.ok) throw new Error("Failed to fetch learning path");
       const data = await response.json();
       setLearningPath(data);

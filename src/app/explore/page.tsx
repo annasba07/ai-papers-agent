@@ -167,7 +167,9 @@ export default function ExplorePage() {
 
       // Use hybrid search API when there's a query, otherwise use keyword-only
       if (searchQuery) {
-        const response = await fetch(`/api/search/hybrid?${params.toString()}`);
+        const response = await fetch(`/api/search/hybrid?${params.toString()}`, {
+          cache: 'no-store',
+        });
 
         if (!response.ok) {
           throw new Error(`Search failed: ${response.status}`);
@@ -222,7 +224,9 @@ export default function ExplorePage() {
           ? `${API_BASE}/api/v1/atlas-db/papers?${paginatedParams.toString()}`
           : `/api/atlas/papers?${paginatedParams.toString()}`;
 
-        const response = await fetch(endpoint);
+        const response = await fetch(endpoint, {
+          cache: 'no-store',
+        });
 
         if (!response.ok) {
           throw new Error(`Failed to fetch papers: ${response.status}`);

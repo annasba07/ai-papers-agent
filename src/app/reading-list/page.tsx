@@ -34,7 +34,7 @@ export default function ReadingListPage() {
             ? `${API_BASE}/atlas-db/papers/${paperId}`
             : `/api/atlas/papers/${paperId}`;
 
-          const response = await fetch(endpoint);
+          const response = await fetch(endpoint, { cache: 'no-store' });
           if (!response.ok) {
             console.warn(`Failed to fetch paper ${paperId}`);
             return null;
