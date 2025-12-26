@@ -14,6 +14,26 @@ from app.db.database import database
 router = APIRouter(prefix="/atlas-db")
 
 
+def detect_paper_type(title: str) -> str:
+    """
+    Detect paper type based on title keywords.
+    Returns: 'survey', 'tutorial', 'review', 'primer', or 'research'
+    """
+    title_lower = title.lower()
+
+    # Order matters: check most specific first
+    if 'tutorial' in title_lower:
+        return 'tutorial'
+    elif 'survey' in title_lower:
+        return 'survey'
+    elif 'review' in title_lower:
+        return 'review'
+    elif any(keyword in title_lower for keyword in ['primer', 'introduction to', 'guide to']):
+        return 'primer'
+    else:
+        return 'research'
+
+
 class PaperResponse(BaseModel):
     """Paper response model"""
     id: str
@@ -263,6 +283,9 @@ async def get_papers(
         plain_id = row["id"].split("v")[0]
         link = f"https://arxiv.org/abs/{plain_id}"
 
+        # Detect paper type from title
+        paper_type = detect_paper_type(row["title"])
+
         papers.append({
             "id": row["id"],
             "title": row["title"],
@@ -275,7 +298,8 @@ async def get_papers(
             "concepts": row["concepts"] or [],
             "code_repos": row["code_repos"],
             "external_signals": row["external_signals"],
-            "deep_analysis": row["deep_analysis"]
+            "deep_analysis": row["deep_analysis"],
+            "paper_type": paper_type
         })
 
     return {
@@ -317,6 +341,9 @@ async def get_paper(paper_id: str):
 
     plain_id = row["id"].split("v")[0]
 
+    # Detect paper type from title
+    paper_type = detect_paper_type(row["title"])
+
     return {
         "id": row["id"],
         "title": row["title"],
@@ -330,7 +357,8 @@ async def get_paper(paper_id: str):
         "concepts": row["concepts"] or [],
         "ai_analysis": row["ai_analysis"],
         "deep_analysis": row["deep_analysis"],
-        "code_repos": row["code_repos"]
+        "code_repos": row["code_repos"],
+        "paper_type": paper_type
     }
 
 
