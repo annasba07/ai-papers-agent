@@ -370,7 +370,7 @@ export default function DiscoveryPage() {
         params.set("topic", topic.trim());
       }
       const url = API_BASE
-        ? `${API_BASE}/discovery/learning-path?${params.toString()}`
+        ? `${API_BASE}/api/v1/discovery/learning-path?${params.toString()}`
         : `/api/discovery/learning-path?${params.toString()}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch learning path");
