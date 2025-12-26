@@ -592,6 +592,36 @@ async def contextual_search(request: ContextualSearchRequest = Body(...)):
             # Trim back to top_k
             papers = papers[:top_k]
 
+        # Boost beginner-friendly papers (Survey, Tutorial, Review, Primer) for learning queries
+        # Detect learning intent: queries about learning, understanding, or getting started
+        learning_keywords = [
+            "learn", "understand", "basics", "fundamentals", "introduction",
+            "beginner", "start", "getting started", "new to", "primer", "tutorial"
+        ]
+        is_learning_query = any(kw in user_description.lower() for kw in learning_keywords)
+
+        if is_learning_query and papers:
+            def get_educational_score(paper: Dict) -> float:
+                """Boost Survey/Tutorial/Review papers for learning queries"""
+                base_score = paper.get("score", 0.0)
+                title = paper.get("title", "").lower()
+
+                # Detect paper type from title
+                educational_boost = 0.0
+                if "survey" in title:
+                    educational_boost = 0.3  # Strong boost for surveys
+                elif "tutorial" in title:
+                    educational_boost = 0.35  # Strongest boost for tutorials
+                elif "review" in title:
+                    educational_boost = 0.25
+                elif any(kw in title for kw in ["primer", "introduction to", "guide to"]):
+                    educational_boost = 0.3
+
+                return base_score + educational_boost
+
+            # Re-rank by educational value for learning queries
+            papers.sort(key=get_educational_score, reverse=True)
+
         used_fallback = False
 
         if not papers:
