@@ -34,6 +34,34 @@ def detect_paper_type(title: str) -> str:
         return 'research'
 
 
+# Domain-specific keyword mappings for cross-domain search
+# Helps interdisciplinary researchers find relevant papers
+DOMAIN_KEYWORDS = {
+    "climate": ["weather", "environmental", "earth", "atmosphere", "ocean", "carbon", "emission"],
+    "medical": ["clinical", "health", "patient", "diagnosis", "treatment", "disease", "healthcare"],
+    "biology": ["protein", "gene", "cell", "molecular", "organism", "evolution", "biomedical"],
+    "finance": ["trading", "stock", "market", "economic", "financial", "investment", "risk"],
+    "robotics": ["robot", "manipulation", "control", "autonomous", "navigation", "gripper"],
+    "chemistry": ["molecule", "compound", "reaction", "synthesis", "material", "catalyst"],
+}
+
+
+def detect_application_domain(query: str) -> list:
+    """
+    Detect application domains mentioned in query.
+    Returns list of domain-specific keywords to boost.
+    """
+    query_lower = query.lower()
+    related_keywords = []
+
+    for domain, keywords in DOMAIN_KEYWORDS.items():
+        if domain in query_lower or any(kw in query_lower for kw in keywords[:2]):
+            # Found domain mention - add all related keywords
+            related_keywords.extend(keywords)
+
+    return list(set(related_keywords))  # Remove duplicates
+
+
 class PaperResponse(BaseModel):
     """Paper response model"""
     id: str
@@ -123,12 +151,23 @@ async def get_papers(
     using_fts = False
 
     if query:
+        # Detect application domain and expand query with related keywords
+        # Helps cross-domain researchers find relevant papers (e.g., climate science + ML)
+        domain_keywords = detect_application_domain(query)
+        expanded_query = query
+        if domain_keywords:
+            # Add top 3 most relevant domain keywords to boost recall
+            # Use OR logic so papers matching either original query OR domain keywords surface
+            top_domain_keywords = domain_keywords[:3]
+            expanded_query = query + " " + " ".join(top_domain_keywords)
+
         # Try PostgreSQL full-text search first (faster + better ranking)
         # Falls back to tokenized ILIKE search if search_vector not populated
         try:
             # Attempt full-text search using pre-built search_vector
+            # Use expanded query for cross-domain searches
             conditions.append("p.search_vector @@ plainto_tsquery('english', :fts_query)")
-            params["fts_query"] = query
+            params["fts_query"] = expanded_query
             using_fts = True
         except Exception:
             # Fallback: Tokenized ILIKE search for flexible word matching
