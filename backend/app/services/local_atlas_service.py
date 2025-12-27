@@ -94,6 +94,17 @@ class LocalAtlasService(LoggerMixin):
             self._model_name = model_name
             cached_embeddings, label_used = self._load_cached_embeddings(cache_dir, model_name, self._default_cache_label)
 
+            if cached_embeddings is None and not settings.ATLAS_EMBED_BUILD_ON_STARTUP:
+                self.log_warning(
+                    "No cached embeddings found; skipping semantic index build",
+                    cache_dir=str(cache_dir),
+                    model=model_name,
+                )
+                self._encoder = None
+                self._embeddings = None
+                self.enabled = True  # Still allow lexical search
+                return
+
             if model_name.startswith("allenai/specter2"):
                 self._encoder_type = "specter2"
                 self._encoder = Specter2Encoder(model_name)
