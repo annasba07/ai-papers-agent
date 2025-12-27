@@ -100,7 +100,7 @@ async def get_papers(
     concept: Optional[str] = Query(default=None),
     query: Optional[str] = Query(default=None),
     days: Optional[int] = Query(default=None, description="Filter to papers from last N days"),
-    order_by: str = Query(default="published_date", enum=["published_date", "citation_count", "title"]),
+    order_by: Optional[str] = Query(default=None, enum=["published_date", "citation_count", "title"]),
     order_dir: str = Query(default="desc", enum=["asc", "desc"]),
     # Deep analysis filters
     min_impact_score: Optional[int] = Query(default=None, ge=1, le=10, description="Minimum deep analysis impact score (1-10)"),
@@ -151,56 +151,28 @@ async def get_papers(
     using_fts = False
 
     if query:
-        # Detect application domain and expand query with related keywords
-        # Helps cross-domain researchers find relevant papers (e.g., climate science + ML)
-        domain_keywords = detect_application_domain(query)
-        expanded_query = query
-        if domain_keywords:
-            # Add top 3 most relevant domain keywords to boost recall
-            # Use OR logic so papers matching either original query OR domain keywords surface
-            top_domain_keywords = domain_keywords[:3]
-            expanded_query = query + " " + " ".join(top_domain_keywords)
+        # Tokenize to avoid empty/stop-word-only queries.
+        words = [w.strip().lower() for w in query.split() if len(w.strip()) >= 3]
 
-        # Try PostgreSQL full-text search first (faster + better ranking)
-        # Falls back to tokenized ILIKE search if search_vector not populated
-        try:
-            # Attempt full-text search using pre-built search_vector
-            # Use expanded query for cross-domain searches
-            conditions.append("p.search_vector @@ plainto_tsquery('english', :fts_query)")
+        if len(words) > 0:
+            # Detect application domain and expand query with related keywords
+            # Helps cross-domain researchers find relevant papers (e.g., climate science + ML)
+            domain_keywords = detect_application_domain(query)
+            expanded_query = query
+            if domain_keywords:
+                # Add top 3 most relevant domain keywords to boost recall
+                # Use OR logic so papers matching either original query OR domain keywords surface
+                top_domain_keywords = domain_keywords[:3]
+                expanded_query = query + " " + " ".join(top_domain_keywords)
+
+            # Use FTS with a COALESCE fallback so missing search_vector doesn't drop all results.
+            tsvector_expr = (
+                "COALESCE(p.search_vector, "
+                "to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.abstract, '')))"
+            )
+            conditions.append(f"{tsvector_expr} @@ plainto_tsquery('english', :fts_query)")
             params["fts_query"] = expanded_query
             using_fts = True
-        except Exception:
-            # Fallback: Tokenized ILIKE search for flexible word matching
-            # Industry best practice: split multi-word queries into individual tokens
-            # to avoid overly restrictive exact-phrase matching
-
-            # Tokenize: split on whitespace, filter short/stop words
-            words = [w.strip().lower() for w in query.split() if len(w.strip()) >= 3]
-
-            if len(words) == 0:
-                # Query too short or all stop words - skip filtering
-                pass
-            elif len(words) == 1:
-                # Single word: simple ILIKE pattern
-                conditions.append("(p.title ILIKE :query OR p.abstract ILIKE :query)")
-                params["query"] = f"%{words[0]}%"
-            else:
-                # Multiple words: require ALL words to appear (AND logic)
-                # This improves recall while maintaining precision
-                # e.g., "model quantization" matches papers with both words anywhere
-
-                # Limit to first 5 words to prevent query complexity explosion
-                words = words[:5]
-
-                word_conditions = []
-                for i, word in enumerate(words):
-                    word_param = f"word_{i}"
-                    word_conditions.append(
-                        f"(p.title ILIKE :{word_param} OR p.abstract ILIKE :{word_param})"
-                    )
-                    params[word_param] = f"%{word}%"
-
-                conditions.append("(" + " AND ".join(word_conditions) + ")")
 
     if concept:
         conditions.append("""
@@ -266,11 +238,17 @@ async def get_papers(
     if using_fts and not order_by:
         # When using FTS without explicit ordering, rank by relevance (ts_rank)
         # Secondary sort by recency to break ties
-        order_clause = "ts_rank(p.search_vector, plainto_tsquery('english', :fts_query)) DESC, p.published_date DESC"
+        order_clause = (
+            "ts_rank("
+            "COALESCE(p.search_vector, "
+            "to_tsvector('english', COALESCE(p.title, '') || ' ' || COALESCE(p.abstract, ''))), "
+            "plainto_tsquery('english', :fts_query)"
+            ") DESC, p.published_date DESC"
+        )
     else:
         # Use explicit ordering or default to recency
         valid_order_fields = {"published_date": "p.published_date", "citation_count": "p.citation_count", "title": "p.title"}
-        order_field = valid_order_fields.get(order_by, "p.published_date")
+        order_field = valid_order_fields.get(order_by or "published_date", "p.published_date")
         order_direction = "DESC" if order_dir == "desc" else "ASC"
         order_clause = f"{order_field} {order_direction}"
 
