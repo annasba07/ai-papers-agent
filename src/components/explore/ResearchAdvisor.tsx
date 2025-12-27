@@ -8,8 +8,6 @@ interface ResearchAdvisorProps {
   onClose: () => void;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-
 // Starter prompts to help users get started - diverse, accessible examples
 const STARTER_PROMPTS = [
   "How to make AI explain its decisions",
@@ -92,17 +90,14 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        API_BASE ? `${API_BASE}/api/v1/papers/contextual-search` : "/api/contextual-search",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            description: userMessage.content,
-            fast_mode: false,
-          }),
-        }
-      );
+      const response = await fetch("/api/contextual-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: userMessage.content,
+          fast_mode: false,
+        }),
+      });
 
       // Try to parse response even if not OK - might contain papers
       let data;

@@ -4,7 +4,7 @@ const rawBase =
   process.env.RESEARCH_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   '';
-const backendBase = rawBase.replace(/\/$/, '');
+const backendBase = rawBase.replace(/\/$/, '').replace(/\/api\/v1$/, '');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
