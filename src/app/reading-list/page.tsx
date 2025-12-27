@@ -71,7 +71,7 @@ export default function ReadingListPage() {
         <header className="reading-list-header">
           <h1 className="reading-list-header__title">Reading List</h1>
           <p className="reading-list-header__subtitle">
-            Papers you've saved for later. Your reading list is stored locally in your browser.
+            Papers you&apos;ve saved for later. Your reading list is stored locally in your browser.
           </p>
           {bookmarkCount > 0 && (
             <span className="reading-list-header__count">
