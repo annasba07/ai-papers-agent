@@ -2,10 +2,11 @@
 API v1 router configuration
 """
 from fastapi import APIRouter
-from app.api.v1.endpoints import papers, knowledge_graph, enrichment, trends, agent_memory, atlas_db, ingestion, discovery, data_moat, leaderboards, pipeline
+from app.api.v1.endpoints import papers, knowledge_graph, enrichment, trends, agent_memory, atlas_db, ingestion, discovery, data_moat, leaderboards, pipeline, search
 
 api_router = APIRouter()
 api_router.include_router(papers.router, prefix="/papers", tags=["papers"])
+api_router.include_router(search.router, tags=["search"])
 api_router.include_router(knowledge_graph.router, prefix="/knowledge-graph", tags=["knowledge-graph"])
 api_router.include_router(enrichment.router, tags=["enrichment"])
 api_router.include_router(trends.router, tags=["trends"])
