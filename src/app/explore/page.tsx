@@ -87,6 +87,8 @@ export default function ExplorePage() {
   const [sessionRestored, setSessionRestored] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const isLoadingMore = useRef(false);
+  const activeRequestId = useRef(0);
+  const activeAbortController = useRef<AbortController | null>(null);
 
   const [filters, setFilters] = useState<ExploreFilters>(defaultFilters);
 
@@ -146,6 +148,13 @@ export default function ExplorePage() {
     if (loadMore && isLoadingMore.current) return;
     if (loadMore) isLoadingMore.current = true;
 
+    const requestId = ++activeRequestId.current;
+    const controller = new AbortController();
+    if (activeAbortController.current) {
+      activeAbortController.current.abort();
+    }
+    activeAbortController.current = controller;
+
     const currentOffset = typeof overrideOffset === 'number' ? overrideOffset : (loadMore ? offset : 0);
 
     if (!loadMore) {
@@ -200,6 +209,7 @@ export default function ExplorePage() {
 
       const response = await fetch(`/api/search/hybrid?${paginatedParams.toString()}`, {
         cache: 'no-store',
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -207,6 +217,10 @@ export default function ExplorePage() {
       }
 
       const data: HybridSearchResult = await response.json();
+
+      if (requestId !== activeRequestId.current) {
+        return;
+      }
 
       // Set semantic results (AI-powered) - only present when there's a query
       setSemanticPapers(data.semanticResults || []);
@@ -248,14 +262,19 @@ export default function ExplorePage() {
       setHasMore(data.has_more !== false && data.keywordResults.length === ITEMS_PER_PAGE);
       setOffset(currentOffset + data.keywordResults.length);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load papers");
       if (!loadMore) {
         setPapers([]);
         setSemanticPapers([]);
       }
     } finally {
-      setLoading(false);
-      setSemanticLoading(false);
+      if (requestId === activeRequestId.current) {
+        setLoading(false);
+        setSemanticLoading(false);
+      }
       isLoadingMore.current = false;
     }
   }, [searchQuery, filters]);
