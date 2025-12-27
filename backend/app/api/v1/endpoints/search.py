@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Literal, Tuple
 from time import perf_counter
+import asyncio
+import logging
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -18,6 +20,11 @@ from app.schemas.paper import ContextualSearchRequest
 from app.services.local_atlas_service import local_atlas_service
 
 router = APIRouter(prefix="/search")
+logger = logging.getLogger(__name__)
+
+KEYWORD_TIMEOUT_S = 3.0
+SEMANTIC_TIMEOUT_S = 3.0
+ANALYSIS_TIMEOUT_S = 12.0
 
 
 class SearchRequest(BaseModel):
@@ -108,6 +115,37 @@ async def _keyword_search(payload: SearchRequest) -> Dict[str, Any]:
     )
 
 
+async def _safe_keyword_search(payload: SearchRequest) -> Dict[str, Any]:
+    try:
+        return await asyncio.wait_for(_keyword_search(payload), timeout=KEYWORD_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        logger.warning("Keyword search timed out", extra={"query": payload.query})
+    except Exception as exc:
+        logger.warning("Keyword search failed", exc_info=exc)
+    return {"papers": [], "total": 0, "has_more": False}
+
+
+async def _safe_semantic_search(payload: SearchRequest, query: str) -> List[Dict[str, Any]]:
+    if not local_atlas_service.enabled:
+        return []
+
+    def _search() -> List[Dict[str, Any]]:
+        return local_atlas_service.search(
+            query,
+            top_k=payload.limit,
+            category=payload.category,
+            max_age_days=payload.days,
+        )
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_search), timeout=SEMANTIC_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        logger.warning("Semantic search timed out", extra={"query": query})
+    except Exception as exc:
+        logger.warning("Semantic search failed", exc_info=exc)
+    return []
+
+
 def _simplify_query(query: str) -> Optional[str]:
     words = [w for w in query.split() if len(w) >= 3]
     if len(words) >= 3:
@@ -136,22 +174,28 @@ async def _handle_search(payload: SearchRequest) -> Dict[str, Any]:
             skip_reranking=False,
             skip_synthesis=payload.analysis_mode != "deep",
         )
-        analysis_response = await contextual_search(analysis_request)
-        analysis_text = analysis_response.analysis
-        semantic_results = [_map_semantic_from_contextual(p) for p in analysis_response.papers]
-        mode = "semantic_only"
+        try:
+            analysis_response = await asyncio.wait_for(
+                contextual_search(analysis_request),
+                timeout=ANALYSIS_TIMEOUT_S,
+            )
+        except Exception as exc:
+            logger.warning("Contextual search failed", exc_info=exc)
+        else:
+            analysis_text = analysis_response.analysis
+            semantic_results = [_map_semantic_from_contextual(p) for p in analysis_response.papers]
+            mode = "semantic_only"
 
     if mode != "keyword_only":
         if query and not semantic_results:
             semantic_start = perf_counter()
-            if local_atlas_service.enabled:
-                papers = local_atlas_service.search(query, top_k=payload.limit)
-                semantic_results = [_map_semantic_from_atlas(p) for p in papers]
+            papers = await _safe_semantic_search(payload, query)
+            semantic_results = [_map_semantic_from_atlas(p) for p in papers]
             timing["semantic_ms"] = (perf_counter() - semantic_start) * 1000
 
     if mode != "semantic_only":
         keyword_start = perf_counter()
-        keyword_payload = await _keyword_search(payload)
+        keyword_payload = await _safe_keyword_search(payload)
         timing["keyword_ms"] = (perf_counter() - keyword_start) * 1000
         keyword_results = keyword_payload.get("papers", []) or []
         total_keyword = keyword_payload.get("total", len(keyword_results))
@@ -162,7 +206,7 @@ async def _handle_search(payload: SearchRequest) -> Dict[str, Any]:
         simplified = _simplify_query(query)
         if simplified:
             retry_payload = payload.copy(update={"query": simplified, "limit": payload.limit * 2})
-            retry_keyword = await _keyword_search(retry_payload)
+            retry_keyword = await _safe_keyword_search(retry_payload)
             keyword_results = retry_keyword.get("papers", []) or []
             total_keyword = retry_keyword.get("total", len(keyword_results))
             has_more = retry_keyword.get("has_more", False)
