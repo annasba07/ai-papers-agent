@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import path from 'path';
 
-const atlasDir = process.env.ATLAS_DATA_DIR || path.join(process.cwd(), 'data', 'derived');
+const derivedDir = path.join(process.cwd(), 'data', 'derived_12mo');
+const fallbackDir = path.join(process.cwd(), 'data', 'derived');
+const atlasDir = process.env.ATLAS_DATA_DIR || (existsSync(derivedDir) ? derivedDir : fallbackDir);
 const rawBase =
   process.env.RESEARCH_API_BASE_URL ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||

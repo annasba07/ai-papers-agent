@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import path from 'path';
 import type { AtlasPaper } from '@/types/Atlas';
 
-const atlasDir = process.env.ATLAS_DATA_DIR || path.join(process.cwd(), 'data', 'derived');
+const derivedDir = path.join(process.cwd(), 'data', 'derived_12mo');
+const fallbackDir = path.join(process.cwd(), 'data', 'derived');
+const atlasDir = process.env.ATLAS_DATA_DIR || (existsSync(derivedDir) ? derivedDir : fallbackDir);
 const catalogPath = path.join(atlasDir, 'papers_catalog.ndjson');
 const rawBase =
   process.env.RESEARCH_API_BASE_URL ||
