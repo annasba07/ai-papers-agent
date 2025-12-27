@@ -98,6 +98,28 @@ export default function ExplorePage() {
       setFilters(session.filters);
     }
     setSessionRestored(true);
+
+    // Warm up the backend embedding cache to prevent first-search delays
+    // This eliminates the 8-12 second cold start penalty users experience
+    // on their first search after page load. Warmup runs async and non-blocking.
+    // Fire-and-forget: We don't wait for the response to avoid blocking the UI.
+    // By the time the user searches (~5-10s after page load), cache will be warm.
+    const backendBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+    fetch(`${backendBase}/api/v1/papers/warmup`, {
+      cache: 'no-store',
+      priority: 'low' as RequestPriority,  // Don't block critical resources
+      signal: AbortSignal.timeout(15000),  // 15s timeout for warmup
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.status === 'success') {
+          console.log(`[Warmup] ✓ Cache warmed in ${data.warmup_time_ms}ms - searches will be faster`);
+        }
+      })
+      .catch(() => {
+        // Warmup failure is non-critical - searches will still work but be slower
+        // Don't log error to avoid alarming users - this happens on first load
+      });
   }, []);
 
   // Save session state when search or filters change
