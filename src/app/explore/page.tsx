@@ -499,7 +499,7 @@ export default function ExplorePage() {
                   Not sure where to start?
                 </h2>
                 <p className="advisor-hero__description">
-                  Tell me what you're working on and I'll find the most relevant papers, techniques, and implementations.
+                  Tell me what you&apos;re working on and I&apos;ll find the most relevant papers, techniques, and implementations.
                 </p>
               </div>
               <button
