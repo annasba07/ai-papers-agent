@@ -997,6 +997,25 @@ body {
   gap: 4px;
 }
 
+/* Industry best practice: Code availability badge */
+/* Prominent green gradient to highlight reproducibility */
+.badge-code {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  font-weight: var(--font-bold);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.badge-code:hover {
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transform: rotate(0deg) scale(1.05);
+}
+
 /* Industry best practice: Seminal papers badge (500+ citations) */
 /* Distinct gold/amber gradient to highlight must-read foundational work */
 .badge-seminal {

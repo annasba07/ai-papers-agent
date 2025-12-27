@@ -27,7 +27,9 @@ interface HybridSearchResult {
   keywordResults: ExplorePaper[];
   totalSemantic: number;
   totalKeyword: number;
-  timing: {
+  has_more?: boolean;
+  databaseTotal?: number;
+  timing?: {
     semantic_ms: number;
     keyword_ms: number;
     total_ms: number;
@@ -165,100 +167,64 @@ export default function ExplorePage() {
         params.append("days", String(filters.timeRange));
       }
 
-      // Use hybrid search API when there's a query, otherwise use keyword-only
-      if (searchQuery) {
-        const response = await fetch(`/api/search/hybrid?${params.toString()}`, {
-          cache: 'no-store',
-        });
+      // Always use hybrid search API for consistent, semantic-aware results
+      // When there's a search query, semantic results are shown first
+      // Without a query, keyword results are sorted by recency/citations
+      const paginatedParams = new URLSearchParams(params);
+      paginatedParams.set("offset", String(currentOffset));
+      paginatedParams.set("order_by", filters.sortBy === "recent" ? "published_date" :
+        filters.sortBy === "citations" ? "citation_count" : "published_date");
+      paginatedParams.set("order_dir", "desc");
 
-        if (!response.ok) {
-          throw new Error(`Search failed: ${response.status}`);
-        }
+      const response = await fetch(`/api/search/hybrid?${paginatedParams.toString()}`, {
+        cache: 'no-store',
+      });
 
-        const data: HybridSearchResult = await response.json();
-
-        // Set semantic results (AI-powered)
-        setSemanticPapers(data.semanticResults || []);
-        setSemanticLoading(false);
-
-        // Set keyword results
-        if (loadMore) {
-          setPapers(prev => [...prev, ...data.keywordResults]);
-        } else {
-          setPapers(data.keywordResults || []);
-        }
-
-        // When searching, show filtered count
-        const resultCount = data.totalKeyword + data.totalSemantic;
-        setFilteredCount(hasActiveFilters ? resultCount : undefined);
-        if (data.databaseTotal !== undefined) {
-          setTotalPapers(data.databaseTotal);
-        }
-
-        setSearchTiming({
-          semantic_ms: data.timing.semantic_ms,
-          total_ms: data.timing.total_ms,
-        });
-
-        // Industry best practice: Auto-suggest Research Advisor when search returns 0 results
-        // Rationale: Guides users to a better discovery method instead of abandoning
-        // Data: UX assessments showed 90% of users don't know advisor exists
-        if (data.totalSemantic === 0 && data.totalKeyword === 0 && searchQuery) {
-          // Auto-open advisor panel with a slight delay for better UX
-          setTimeout(() => {
-            setAdvisorOpen(true);
-          }, 800);
-        }
-
-        // For hybrid search, we don't paginate (semantic has limited results)
-        setHasMore(false);
-      } else {
-        // No query - use standard keyword search with pagination
-        const paginatedParams = new URLSearchParams(params);
-        paginatedParams.set("offset", String(currentOffset));
-        paginatedParams.set("order_by", filters.sortBy === "recent" ? "published_date" :
-          filters.sortBy === "citations" ? "citation_count" : "published_date");
-        paginatedParams.set("order_dir", "desc");
-
-        const endpoint = API_BASE
-          ? `${API_BASE}/api/v1/atlas-db/papers?${paginatedParams.toString()}`
-          : `/api/atlas/papers?${paginatedParams.toString()}`;
-
-        const response = await fetch(endpoint, {
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch papers: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const paperList = Array.isArray(data) ? data : data.papers || [];
-
-        if (loadMore) {
-          setPapers(prev => [...prev, ...paperList]);
-        } else {
-          setPapers(paperList);
-        }
-
-        // Update counts: if filters active, show filtered vs total
-        const count = data.total || paperList.length;
-        if (hasActiveFilters) {
-          setFilteredCount(count);
-          // Keep totalPapers as is (database total from previous fetch or initial value)
-          if (!totalPapers) {
-            // First load without filters - this is the database total
-            setTotalPapers(count);
-          }
-        } else {
-          // No filters - this is the database total
-          setTotalPapers(count);
-          setFilteredCount(undefined);
-        }
-
-        setHasMore(data.has_more !== false && paperList.length === ITEMS_PER_PAGE);
-        setOffset(currentOffset + paperList.length);
+      if (!response.ok) {
+        throw new Error(`Search failed: ${response.status}`);
       }
+
+      const data: HybridSearchResult = await response.json();
+
+      // Set semantic results (AI-powered) - only present when there's a query
+      setSemanticPapers(data.semanticResults || []);
+      setSemanticLoading(false);
+
+      // Set keyword results
+      if (loadMore) {
+        setPapers(prev => [...prev, ...data.keywordResults]);
+      } else {
+        setPapers(data.keywordResults || []);
+      }
+
+      // Update counts
+      const resultCount = data.totalKeyword + data.totalSemantic;
+      setFilteredCount(hasActiveFilters ? resultCount : undefined);
+      if (data.databaseTotal !== undefined) {
+        setTotalPapers(data.databaseTotal);
+      }
+
+      // Set timing info if available
+      if (data.timing) {
+        setSearchTiming({
+          semantic_ms: data.timing.semantic_ms || 0,
+          total_ms: data.timing.total_ms || 0,
+        });
+      }
+
+      // Industry best practice: Auto-suggest Research Advisor when search returns 0 results
+      // Rationale: Guides users to a better discovery method instead of abandoning
+      // Data: UX assessments showed 90% of users don't know advisor exists
+      if (data.totalSemantic === 0 && data.totalKeyword === 0 && searchQuery) {
+        // Auto-open advisor panel with a slight delay for better UX
+        setTimeout(() => {
+          setAdvisorOpen(true);
+        }, 800);
+      }
+
+      // Pagination: Allow pagination for keyword results
+      setHasMore(data.has_more !== false && data.keywordResults.length === ITEMS_PER_PAGE);
+      setOffset(currentOffset + data.keywordResults.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load papers");
       if (!loadMore) {

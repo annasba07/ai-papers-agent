@@ -37,6 +37,8 @@ interface HybridSearchResult {
   keywordResults: KeywordPaper[];
   totalSemantic: number;
   totalKeyword: number;
+  has_more?: boolean;
+  databaseTotal?: number;
   timing: {
     semantic_ms: number;
     keyword_ms: number;
@@ -66,11 +68,15 @@ export async function GET(request: NextRequest) {
 
   const query = searchParams.get('query')?.trim() || '';
   const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50);
+  const offset = searchParams.get('offset') || '0';
+  const orderBy = searchParams.get('order_by') || 'published_date';
+  const orderDir = searchParams.get('order_dir') || 'desc';
   const category = searchParams.get('category');
   const hasDeepAnalysis = searchParams.get('has_deep_analysis');
   const minImpactScore = searchParams.get('min_impact_score');
   const minReproducibility = searchParams.get('min_reproducibility');
   const difficultyLevel = searchParams.get('difficulty_level');
+  const hasCode = searchParams.get('has_code');
 
   if (!backendBase) {
     return NextResponse.json(
@@ -81,9 +87,10 @@ export async function GET(request: NextRequest) {
 
   // Build keyword search params
   const keywordParams = new URLSearchParams({
-    limit: String(limit * 2), // Fetch more for deduplication buffer
-    order_by: 'published_date',
-    order_dir: 'desc',
+    limit: String(query ? limit * 2 : limit), // Fetch more for deduplication when query exists
+    offset: offset,
+    order_by: orderBy,
+    order_dir: orderDir,
   });
 
   if (query) keywordParams.set('query', query);
@@ -92,6 +99,7 @@ export async function GET(request: NextRequest) {
   if (minImpactScore) keywordParams.set('min_impact_score', minImpactScore);
   if (minReproducibility) keywordParams.set('min_reproducibility', minReproducibility);
   if (difficultyLevel) keywordParams.set('difficulty_level', difficultyLevel);
+  if (hasCode) keywordParams.set('has_code', hasCode);
 
   // Prepare semantic search payload (only if we have a query)
   const semanticPayload = query ? {
@@ -162,6 +170,8 @@ export async function GET(request: NextRequest) {
     // Process keyword results
     let keywordPapers: KeywordPaper[] = [];
     let totalKeyword = 0;
+    let hasMore = false;
+    let databaseTotal: number | undefined = undefined;
     let keywordError: string | null = null;
     if (keywordResponse.status === 'fulfilled') {
       const response = keywordResponse.value;
@@ -172,6 +182,8 @@ export async function GET(request: NextRequest) {
           _source: 'keyword' as const,
         }));
         totalKeyword = data.total || keywordPapers.length;
+        hasMore = data.has_more !== false;
+        databaseTotal = data.database_total;
       } else {
         keywordError = `Keyword search failed: ${response.status}`;
         console.warn('[Hybrid Search]', keywordError);
@@ -262,11 +274,13 @@ export async function GET(request: NextRequest) {
 
     timing.total_ms = performance.now() - startTime;
 
-    const result: HybridSearchResult = {
+    const result = {
       semanticResults: enrichedSemanticPapers.slice(0, limit),
       keywordResults: uniqueKeywordPapers.slice(0, limit),
       totalSemantic: semanticPapers.length,
       totalKeyword: totalKeyword,
+      has_more: hasMore,
+      databaseTotal: databaseTotal,
       timing,
       searchMode: query ? 'hybrid' : 'keyword_only',
     };
