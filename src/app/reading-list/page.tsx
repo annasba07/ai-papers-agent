@@ -7,8 +7,6 @@ import PaperCard from "@/components/explore/PaperCard";
 import PaperCardSkeleton from "@/components/explore/PaperCardSkeleton";
 import type { ExplorePaper } from "@/types/Explore";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-
 export default function ReadingListPage() {
   const { bookmarkedIds, bookmarkCount } = useBookmarks();
   const [papers, setPapers] = useState<ExplorePaper[]>([]);
@@ -30,9 +28,7 @@ export default function ReadingListPage() {
       // Fetch papers individually (could be optimized with batch endpoint)
       const paperPromises = Array.from(bookmarkedIds).map(async (paperId) => {
         try {
-          const endpoint = API_BASE
-            ? `${API_BASE}/atlas-db/papers/${paperId}`
-            : `/api/atlas/papers/${paperId}`;
+          const endpoint = `/api/atlas/papers/${encodeURIComponent(paperId)}`;
 
           const response = await fetch(endpoint, { cache: 'no-store' });
           if (!response.ok) {
