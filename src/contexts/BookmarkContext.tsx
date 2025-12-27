@@ -13,12 +13,21 @@ interface BookmarkContextType {
 
 const BookmarkContext = createContext<BookmarkContextType | undefined>(undefined);
 
+const canUseStorage = () =>
+  typeof localStorage !== "undefined" &&
+  typeof localStorage.getItem === "function" &&
+  typeof localStorage.setItem === "function";
+
 export function BookmarkProvider({ children }: { children: ReactNode }) {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load bookmarks from localStorage on mount
   useEffect(() => {
+    if (!canUseStorage()) {
+      setIsInitialized(true);
+      return;
+    }
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -34,6 +43,9 @@ export function BookmarkProvider({ children }: { children: ReactNode }) {
   // Save bookmarks to localStorage whenever they change
   useEffect(() => {
     if (isInitialized) {
+      if (!canUseStorage()) {
+        return;
+      }
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(bookmarkedIds)));
       } catch {
