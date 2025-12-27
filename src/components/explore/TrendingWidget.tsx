@@ -34,7 +34,7 @@ export default function TrendingWidget() {
       try {
         const endpoint = API_BASE
           ? `${API_BASE}/api/v1/trends/summary`
-          : "/api/trends/summary";
+          : "/api/v1/trends/summary";
 
         const response = await fetch(endpoint);
         if (response.ok) {
