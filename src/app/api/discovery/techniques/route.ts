@@ -14,8 +14,8 @@ export async function GET(request: Request) {
 
   if (!backendBase) {
     return NextResponse.json(
-      { error: 'Backend API not configured' },
-      { status: 500 }
+      { error: 'Backend API not configured', papers: [], novelty_type_distribution: {} },
+      { status: 200 }
     );
   }
 
@@ -41,8 +41,8 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch techniques:', message);
     return NextResponse.json(
-      { error: `Failed to fetch techniques: ${message}`, papers: [] },
-      { status: 500 }
+      { error: `Failed to fetch techniques: ${message}`, papers: [], novelty_type_distribution: {} },
+      { status: 200 }
     );
   }
 }

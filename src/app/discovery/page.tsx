@@ -605,6 +605,12 @@ export default function DiscoveryPage() {
     );
   };
 
+  const totalPapers = stats?.coverage.total_papers ?? 0;
+  const deepAnalyzed = stats?.coverage.deep_analyzed ?? 0;
+  const coveragePercent = totalPapers > 0
+    ? Math.round((deepAnalyzed / totalPapers) * 100)
+    : 0;
+
   return (
     <main className="discovery-page">
       {/* Header */}
@@ -705,7 +711,7 @@ export default function DiscoveryPage() {
                 </div>
                 <div className="discovery-stat-card discovery-stat-card--highlight">
                   <div className="discovery-stat-card__value">
-                    {Math.round((stats.coverage.deep_analyzed / stats.coverage.total_papers) * 100)}%
+                    {coveragePercent}%
                   </div>
                   <div className="discovery-stat-card__label">Enrichment Coverage</div>
                 </div>

@@ -14,8 +14,13 @@ export async function GET(request: Request) {
 
   if (!backendBase) {
     return NextResponse.json(
-      { error: 'Backend API not configured' },
-      { status: 500 }
+      {
+        error: 'Backend API not configured',
+        topic: searchParams.get('topic') || null,
+        category: searchParams.get('category') || null,
+        path: [],
+      },
+      { status: 200 }
     );
   }
 
@@ -43,8 +48,13 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch learning path:', message);
     return NextResponse.json(
-      { error: `Failed to fetch learning path: ${message}`, path: [] },
-      { status: 500 }
+      {
+        error: `Failed to fetch learning path: ${message}`,
+        topic: searchParams.get('topic') || null,
+        category: searchParams.get('category') || null,
+        path: [],
+      },
+      { status: 200 }
     );
   }
 }

@@ -14,8 +14,8 @@ export async function GET(request: Request) {
 
   if (!backendBase) {
     return NextResponse.json(
-      { error: 'Backend API not configured' },
-      { status: 500 }
+      { error: 'Backend API not configured', papers: [] },
+      { status: 200 }
     );
   }
 
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     console.error('Failed to fetch reproducible papers:', message);
     return NextResponse.json(
       { error: `Failed to fetch reproducible papers: ${message}`, papers: [] },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }

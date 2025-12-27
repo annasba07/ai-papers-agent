@@ -5,6 +5,20 @@ const rawBase =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   '';
 const backendBase = rawBase.replace(/\/$/, '');
+const emptyStats = {
+  coverage: {
+    total_papers: 0,
+    ai_analyzed: 0,
+    deep_analyzed: 0,
+    with_code: 0,
+  },
+  distributions: {
+    impact_scores: {},
+    difficulty_levels: {},
+    novelty_types: {},
+    categories: {},
+  },
+};
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,8 +26,8 @@ export const revalidate = 0;
 export async function GET() {
   if (!backendBase) {
     return NextResponse.json(
-      { error: 'Backend API not configured' },
-      { status: 500 }
+      { error: 'Backend API not configured', ...emptyStats },
+      { status: 200 }
     );
   }
 
@@ -30,8 +44,8 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to fetch discovery stats:', message);
     return NextResponse.json(
-      { error: `Failed to fetch discovery stats: ${message}` },
-      { status: 500 }
+      { error: `Failed to fetch discovery stats: ${message}`, ...emptyStats },
+      { status: 200 }
     );
   }
 }
