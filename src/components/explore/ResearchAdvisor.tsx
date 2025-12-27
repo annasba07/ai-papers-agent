@@ -76,18 +76,34 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
 
     const userMessage: AdvisorMessage = {
       id: `user-${Date.now()}`,
       role: "user",
-      content: input.trim(),
+      content: trimmed,
       timestamp: new Date(),
     };
+
+    if (trimmed.length < 10) {
+      const assistantMessage: AdvisorMessage = {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: "Can you add a bit more detail so I can find the most relevant papers? A sentence or two is perfect.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      setInput("");
+      return;
+    }
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
       const response = await fetch("/api/contextual-search", {
@@ -97,6 +113,7 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
           description: userMessage.content,
           fast_mode: false,
         }),
+        signal: controller.signal,
       });
 
       // Try to parse response even if not OK - might contain papers
@@ -147,7 +164,17 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        const timeoutMessage: AdvisorMessage = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "That search took too long to respond. Please try again, or add a bit more detail to narrow the scope.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, timeoutMessage]);
+        return;
+      }
       const errorMessage: AdvisorMessage = {
         id: `error-${Date.now()}`,
         role: "assistant",
@@ -156,6 +183,7 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
