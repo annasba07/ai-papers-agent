@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     ATLAS_EMBED_BATCH_SIZE: int = 64
     ATLAS_EMBED_CACHE_DIR: str = "../embeddings"
     ATLAS_EMBED_CACHE_LABEL: Optional[str] = None
+    ATLAS_EMBED_BUILD_ON_STARTUP: bool = False
     CONTEXTUAL_SEARCH_TOP_K: int = 6
     CONTEXTUAL_SEARCH_MAX_DAYS: int = 1095  # ~3 years
     DEFAULT_AI_CATEGORIES: List[str] = [
