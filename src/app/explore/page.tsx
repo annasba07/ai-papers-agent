@@ -85,6 +85,7 @@ export default function ExplorePage() {
   const [sessionRestored, setSessionRestored] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const isLoadingMore = useRef(false);
+  const offsetRef = useRef(0);
   const activeRequestId = useRef(0);
   const activeAbortController = useRef<AbortController | null>(null);
 
@@ -139,6 +140,10 @@ export default function ExplorePage() {
     }
   }, [searchQuery, filters, sessionRestored]);
 
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+
   const ITEMS_PER_PAGE = 30;
 
   // Fetch papers using hybrid search when there's a query
@@ -153,7 +158,9 @@ export default function ExplorePage() {
     }
     activeAbortController.current = controller;
 
-    const currentOffset = typeof overrideOffset === 'number' ? overrideOffset : (loadMore ? offset : 0);
+    const currentOffset = typeof overrideOffset === 'number'
+      ? overrideOffset
+      : (loadMore ? offsetRef.current : 0);
 
     if (!loadMore) {
       setLoading(true);
