@@ -8,8 +8,6 @@ import ResearchAdvisor from "@/components/explore/ResearchAdvisor";
 import TrendingWidget from "@/components/explore/TrendingWidget";
 import type { ExplorePaper, ExploreFilters } from "@/types/Explore";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-
 // Session storage key for persisting explore state
 const EXPLORE_SESSION_KEY = "explore_session";
 
