@@ -106,12 +106,14 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
-      const response = await fetch("/api/contextual-search", {
+      const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: userMessage.content,
-          fast_mode: false,
+          query: userMessage.content,
+          include_analysis: true,
+          analysis_mode: "deep",
+          mode: "semantic_only",
         }),
         signal: controller.signal,
       });
@@ -125,11 +127,15 @@ export default function ResearchAdvisor({ isOpen, onClose }: ResearchAdvisorProp
       }
 
       // Extract papers regardless of response status
-      const papers = data.papers?.slice(0, 5).map((p: { id: string; title: string; summary?: string }) => ({
-        id: p.id,
-        title: p.title,
-        summary: p.summary || "",
-      })) || [];
+      const semanticResults = data.semanticResults || [];
+      const fallbackResults = data.keywordResults || [];
+      const papers = (semanticResults.length > 0 ? semanticResults : fallbackResults)
+        .slice(0, 5)
+        .map((p: { id: string; title: string; abstract?: string }) => ({
+          id: p.id,
+          title: p.title,
+          summary: p.abstract || "",
+        }));
 
       // If response not OK but we have papers, continue with degraded mode
       if (!response.ok && papers.length === 0) {
