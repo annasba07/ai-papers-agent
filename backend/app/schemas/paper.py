@@ -95,7 +95,7 @@ class BatchAnalysisRequest(BaseModel):
     papers: List[Dict[str, Any]] = Field(..., description="List of papers to analyze")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "papers": [
                     {
@@ -131,7 +131,7 @@ class ContextualSearchRequest(BaseModel):
     )
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "description": "I am building a mobile app that identifies plant species from a photo taken by the user. I need to know the best models for high-accuracy, on-device image classification.",
                 "embedding_label": "specter2",
