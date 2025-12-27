@@ -207,7 +207,7 @@ export default function ExplorePage() {
         filters.sortBy === "citations" ? "citation_count" : "published_date");
       paginatedParams.set("order_dir", "desc");
 
-      const response = await fetch(`/api/search/hybrid?${paginatedParams.toString()}`, {
+      const response = await fetch(`/api/search?${paginatedParams.toString()}`, {
         cache: 'no-store',
         signal: controller.signal,
       });
